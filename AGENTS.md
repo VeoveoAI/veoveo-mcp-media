@@ -1,6 +1,7 @@
 # Agent Instructions
 
-These rules apply to this repository and to component repositories created from it.
+These rules apply to veoveo-mcp-media. The crate's own rules are in
+[`crates/veoveo-mcp-media/AGENTS.md`](crates/veoveo-mcp-media/AGENTS.md).
 
 - Use upstream runtimes such as OpenShell and PostgreSQL unmodified. Adapt through
   supported configuration.
@@ -45,7 +46,7 @@ These rules apply to this repository and to component repositories created from 
   regenerate the metadata from an empty target directory.
 - Statements and tables follow the server schema rules of veoveo-core's
   [database design](https://github.com/VeoveoAI/veoveo-core/blob/50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72/docs/DATABASE.md),
-  which `tests/database_conformance.rs` checks. A statement binds its tenant, bounds its
+  which `crates/veoveo-mcp-media/tests/database_conformance.rs` checks. A statement binds its tenant, bounds its
   rows and reaches them through an index in a generic plan. A table has a primary key,
   an index whose leading columns are each foreign key's, and a
   `COMMENT ON TABLE … IS 'Retention: …'`. A statement that cannot comply carries a
@@ -54,6 +55,9 @@ These rules apply to this repository and to component repositories created from 
   bound to the listing and the tenant, with one statement for the first page and one
   for the pages after a cursor. Do not write a `$cursor IS NULL OR …` predicate, which
   loses the index seek in a cached generic plan.
+- The real generation provider is reached only by the ignored qualification test, run by
+  hand with `MEDIA_PROVIDER_QUALIFICATION=1`; every other test and the local installation
+  use the fake provider. Never print the provider's API key or webhook secret.
 - Keep test logic in Rust and tool behavior in each tool's own configuration. Do not add
   a task runner or shell scripts that hold test logic.
 - Pin exact versions and image digests. When changing a pin, verify the latest stable
