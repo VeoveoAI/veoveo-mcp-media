@@ -112,3 +112,7 @@ rmcp = { workspace = true, features = ["client", "transport-streamable-http-clie
 veoveo-test-fixtures = { workspace = true, features = ["store", "database-conformance"] }
 reqwest = { workspace = true, features = ["rustls-no-provider", "json"] }
 tokio = { workspace = true, features = ["full"] }
+
+[[bin]]
+name = "veoveo-mcp-media"
+required-features = ["server"]

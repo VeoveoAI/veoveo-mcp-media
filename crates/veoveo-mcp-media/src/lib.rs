@@ -7,6 +7,18 @@
 #[cfg(feature = "contract")]
 pub mod contract;
 
+#[cfg(feature = "server")]
+pub mod catalog;
+#[cfg(feature = "server")]
+pub mod mcp;
+#[cfg(feature = "server")]
+pub mod provider;
+#[cfg(feature = "server")]
+pub mod run;
+#[cfg(feature = "server")]
+pub mod server;
+#[cfg(feature = "server")]
+pub mod store;
 
 #[cfg(feature = "contract")]
 use veoveo_types::ServerSlug;
@@ -21,6 +33,13 @@ pub fn component() -> &'static str {
 #[cfg(feature = "contract")]
 pub fn server() -> ServerSlug {
     ServerSlug::parse("media").expect("Media's slug")
+}
+
+/// The migrations in `migrations/`, which the server applies in its own schema at
+/// startup and which record their history in `media._sqlx_migrations`.
+#[cfg(feature = "server")]
+pub fn migrator() -> sqlx::migrate::Migrator {
+    sqlx::migrate!()
 }
 
 #[cfg(test)]
