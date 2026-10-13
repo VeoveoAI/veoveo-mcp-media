@@ -116,3 +116,28 @@ tokio = { workspace = true, features = ["full"] }
 [[bin]]
 name = "veoveo-mcp-media"
 required-features = ["server"]
+
+[[bin]]
+name = "veoveo-mcp-media-fake-provider"
+path = "src/bin/fake_provider.rs"
+required-features = ["testing"]
+
+[[test]]
+name = "database_conformance"
+required-features = ["server"]
+
+[[test]]
+name = "acceptance"
+required-features = ["server"]
+
+[[test]]
+name = "run"
+required-features = ["testing"]
+
+[[test]]
+name = "store"
+required-features = ["server"]
+
+[[test]]
+name = "provider_qualification"
+required-features = ["testing"]

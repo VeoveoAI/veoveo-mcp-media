@@ -2,7 +2,7 @@
 # Stages: dev is the OpenShell environment, check is the single gate, build compiles the
 # release binary, and runtime is the deployable image.
 
-ARG COMPONENT=veoveo-template-mcp-rust
+ARG COMPONENT=veoveo-mcp-media
 
 FROM rust:1.99.0-trixie@sha256:6ff07edce8775d0f64be7aba9197229407301bddf2054d62c27b541a6238a181 AS dev
 # PostgreSQL 18.6 from the PGDG repository, whose signing key Debian's postgresql-common
@@ -26,6 +26,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
         cargo-insta@1.49.0 \
     && cargo install --locked sqlx-cli@0.9.0 --no-default-features --features postgres,rustls,sqlx-toml
 COPY env/profile.d/rust.sh /etc/profile.d/rust.sh
+# RustFS 1.0.1, the installation's object store. The run tests store outputs through an
+# in-process Artifact over a private server per test process, as they start PostgreSQL.
+COPY --from=rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c \
+    /usr/bin/rustfs /usr/local/bin/rustfs
 # A development environment installs toolchains, components and crates, so the sandbox user owns them.
 RUN useradd --create-home --uid 1000 --shell /bin/bash sandbox \
     && chown -R sandbox:sandbox /usr/local/rustup /usr/local/cargo
@@ -38,9 +42,11 @@ COPY --chown=sandbox:sandbox . .
 FROM source AS check
 # The committed .sqlx query metadata must match the crate's queries against the kernel
 # migrations of the pinned veoveo-core checkout and the crate's own migrations, applied
-# in the server's schema.
+# in the server's schema. The tests compile Artifact's queries too, so Artifact's
+# migrations of the pinned checkout run in its schema first.
 RUN cargo fetch --locked \
     && store="$(echo /usr/local/cargo/git/checkouts/veoveo-core-*/*/platform/store)" \
+    && artifact="$(echo /usr/local/cargo/git/checkouts/veoveo-mcp-artifact-*/*/crates/veoveo-mcp-artifact)" \
     && initdb --pgdata /tmp/sqlx/data --username postgres --auth=trust --no-instructions --no-sync \
     && pg_ctl start --pgdata /tmp/sqlx/data --wait --silent \
         --options "-c listen_addresses=127.0.0.1 -c unix_socket_directories=/tmp/sqlx -c fsync=off" \
@@ -48,10 +54,13 @@ RUN cargo fetch --locked \
     && DATABASE_URL=postgres://postgres@127.0.0.1/veoveo cargo sqlx migrate run \
         --source "${store}/migrations" --config "${store}/sqlx.toml" \
     && psql --host 127.0.0.1 --username postgres --dbname veoveo --quiet \
-        --command "SELECT kernel.ensure_server('template')" \
+        --command "SELECT kernel.ensure_server('artifact')" \
+        --command "SELECT kernel.ensure_server('media')" \
     && DATABASE_URL=postgres://postgres@127.0.0.1/veoveo cargo sqlx migrate run \
-        --source crates/veoveo-template-mcp-rust/migrations \
-        --config crates/veoveo-template-mcp-rust/sqlx.toml \
+        --source "${artifact}/migrations" --config "${artifact}/sqlx.toml" \
+    && DATABASE_URL=postgres://postgres@127.0.0.1/veoveo cargo sqlx migrate run \
+        --source crates/veoveo-mcp-media/migrations \
+        --config crates/veoveo-mcp-media/sqlx.toml \
     && DATABASE_URL=postgres://postgres@127.0.0.1/veoveo cargo sqlx prepare --workspace --check \
         -- --all-targets --all-features \
     && pg_ctl stop --pgdata /tmp/sqlx/data --mode fast --wait --silent \
@@ -60,7 +69,7 @@ RUN cargo fmt --check \
     && cargo clippy --locked --all-targets --all-features -- -D warnings \
     && cargo deny --locked check \
     && cargo hack check --each-feature --no-dev-deps \
-    && cargo nextest run --locked --profile ci
+    && cargo nextest run --locked --profile ci --all-features
 
 FROM source AS build
 ARG COMPONENT
@@ -75,7 +84,7 @@ RUN useradd --system --uid 10001 --no-create-home "${COMPONENT}"
 COPY --from=build "/home/sandbox/${COMPONENT}" "/usr/local/bin/${COMPONENT}"
 USER ${COMPONENT}
 # The exec form cannot expand build arguments, so the binary path is fixed here.
-ENTRYPOINT ["/usr/local/bin/veoveo-template-mcp-rust"]
+ENTRYPOINT ["/usr/local/bin/veoveo-mcp-media"]
 LABEL org.opencontainers.image.title="${COMPONENT}" \
       org.opencontainers.image.source="https://github.com/VeoveoAI/${COMPONENT}" \
       org.opencontainers.image.version="${VERSION}" \

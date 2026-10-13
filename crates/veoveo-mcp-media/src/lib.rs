@@ -9,6 +9,8 @@ pub mod contract;
 
 #[cfg(feature = "server")]
 pub mod catalog;
+#[cfg(feature = "testing")]
+pub mod fake;
 #[cfg(feature = "server")]
 pub mod mcp;
 #[cfg(feature = "server")]
