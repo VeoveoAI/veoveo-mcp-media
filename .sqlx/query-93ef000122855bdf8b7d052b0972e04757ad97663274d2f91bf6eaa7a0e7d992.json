@@ -1,0 +1,163 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- One Work Context with its grants and membership rules, read in one snapshot.\nSELECT\n    w.id AS \"id: WorkContextId\",\n    w.tenant AS \"tenant: TenantId\",\n    w.context_key,\n    w.title,\n    w.policy_revision,\n    w.owner_kind AS \"owner_kind: GrantSubjectKind\",\n    w.owner_key,\n    w.classification,\n    w.data_labels,\n    (\n        SELECT coalesce(\n            jsonb_agg(\n                jsonb_build_object(\n                    'subject_kind', g.subject_kind,\n                    'subject_key', g.subject_key,\n                    'permission', g.permission\n                )\n                ORDER BY g.ordinal\n            ),\n            '[]'::jsonb\n        )\n        FROM identity.work_context_grant AS g\n        WHERE g.work_context = w.id\n    ) AS \"initial_grants!: Json<Vec<WorkContextInitialGrantRecord>>\",\n    (\n        SELECT coalesce(\n            jsonb_agg(\n                jsonb_build_object(\n                    'level', m.level,\n                    'principals', m.principals,\n                    'groups', m.groups,\n                    'roles', m.roles,\n                    'oauth_clients', m.oauth_clients\n                )\n                ORDER BY m.ordinal\n            ),\n            '[]'::jsonb\n        )\n        FROM identity.work_context_membership AS m\n        WHERE m.work_context = w.id\n    ) AS \"memberships!: Json<Vec<WorkContextMembershipRuleRecord>>\",\n    w.created_at,\n    w.updated_at\nFROM identity.work_context AS w\nWHERE w.tenant = $1 AND w.context_key = $2\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: WorkContextId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant: TenantId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "tenant"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "context_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "context_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "policy_revision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "policy_revision"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "owner_kind: GrantSubjectKind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "owner_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "owner_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "owner_key"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "classification",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "classification"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "data_labels",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "data_labels"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "initial_grants!: Json<Vec<WorkContextInitialGrantRecord>>",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "memberships!: Json<Vec<WorkContextMembershipRuleRecord>>",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "identity.work_context",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      null,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "93ef000122855bdf8b7d052b0972e04757ad97663274d2f91bf6eaa7a0e7d992"
+}

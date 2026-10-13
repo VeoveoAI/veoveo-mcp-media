@@ -1,0 +1,24 @@
+[package]
+name = "veoveo-template-mcp-rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+veoveo-platform-store.workspace = true
+veoveo-types.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+# `database-conformance` holds the crate's queries and schema to core's database rules.
+veoveo-test-fixtures = { workspace = true, features = ["store", "database-conformance"] }
+tokio = { workspace = true, features = ["full"] }

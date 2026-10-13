@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A page of a tenant's items after a cursor's key. A separate statement for the first\n-- page keeps this bound an index condition in a cached generic plan.\nSELECT item_key AS \"item_key: ItemId\", name\nFROM template.item\nWHERE tenant = $1 AND item_key > $2\nORDER BY item_key\nLIMIT $3\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_key: ItemId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "template.item",
+            "name": "item_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "template.item",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7fdea74b65c518f5be0946f4b545e1f2008cc82a846fe50fd05a0fe0bfd5b0ea"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- SET search_path for the session, with the schema as a parameter.\nSELECT set_config('search_path', $1, false) AS \"search_path!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "search_path!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c9b0d11eb05758d1826f3e292166543eab8402ae7e3aa410b3d6cb0b8bb78d86"
+}

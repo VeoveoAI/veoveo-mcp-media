@@ -1,0 +1,4 @@
+# sqlx query macros read the committed `.sqlx` metadata instead of a database.
+# `cargo sqlx prepare` sets SQLX_OFFLINE=false itself, which takes precedence.
+[env]
+SQLX_OFFLINE = "true"

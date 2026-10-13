@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A clean shutdown deletes the instance's row and releases its lock before the connection\n-- closes, so the instance reads as dead once shutdown returns rather than once the server\n-- process behind the connection exits.\nWITH stopped AS (\n    DELETE FROM kernel.instance WHERE id = $1\n)\nSELECT pg_catalog.pg_advisory_unlock(1987471726, $1) AS \"released!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "released!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "802a113427910ac88eb01c5dc6c4c9aa1a89947f1d7106a8bddd33cf17a18336"
+}
