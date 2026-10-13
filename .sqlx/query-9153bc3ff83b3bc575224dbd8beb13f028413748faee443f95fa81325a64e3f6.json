@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The server computed a verifying artifact's SHA-256: the artifact is available and its\n-- retention starts.\nUPDATE artifact.artifact AS a\nSET sha256 = $3,\n    state = 'available',\n    available_at = $4::timestamptz,\n    retain_until = CASE\n        WHEN a.retention_days IS NOT NULL THEN $4::timestamptz + make_interval(days => a.retention_days)\n    END\nWHERE a.tenant = $1 AND a.artifact_id = $2 AND a.state = 'verifying'\nRETURNING a.artifact_id AS \"artifact_id: ArtifactId\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "artifact_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9153bc3ff83b3bc575224dbd8beb13f028413748faee443f95fa81325a64e3f6"
+}

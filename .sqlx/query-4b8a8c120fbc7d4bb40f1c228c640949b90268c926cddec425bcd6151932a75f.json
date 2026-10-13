@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- How many of a block's member records the partition still holds.\nSELECT count(*) AS \"present!\"\nFROM audit.record AS r\nWHERE r.partition = $1 AND r.id = ANY ($2)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4b8a8c120fbc7d4bb40f1c228c640949b90268c926cddec425bcd6151932a75f"
+}

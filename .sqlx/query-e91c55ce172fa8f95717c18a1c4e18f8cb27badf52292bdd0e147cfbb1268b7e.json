@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the sweep prunes every tenant's ended uploads in batches)\n-- Delete one batch of uploads that ended before the cutoff.\nWITH due AS (\n    SELECT tenant, upload_id\n    FROM artifact.upload\n    WHERE ended_at < $1 AND ended_at IS NOT NULL\n    ORDER BY ended_at\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n)\nDELETE FROM artifact.upload AS u\nUSING due\nWHERE u.tenant = due.tenant AND u.upload_id = due.upload_id\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e91c55ce172fa8f95717c18a1c4e18f8cb27badf52292bdd0e147cfbb1268b7e"
+}

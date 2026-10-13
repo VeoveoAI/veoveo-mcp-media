@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the due pass wakes the server's parked Tasks of every tenant)\n-- Queue up to $2 of server $1's Tasks parked on an operation whose next check is due,\n-- earliest first. A Task another transaction holds waits for a later pass.\nUPDATE tasks.task AS task\nSET status = 'queued', status_message = 'Queued', parked_on = NULL\nFROM (\n    SELECT parked.id\n    FROM tasks.task_operation AS o\n    JOIN tasks.task AS parked\n        ON parked.id = o.task_id AND parked.parked_on = o.operation_key\n    WHERE o.server = $1 AND o.next_check_at <= now()\n        AND o.state IN ('dispatching', 'submitted')\n        AND parked.status = 'waiting'\n    ORDER BY o.next_check_at\n    LIMIT $2\n    FOR UPDATE OF parked SKIP LOCKED\n) AS due\nWHERE task.id = due.id\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3311e97783e56fecd3848793a045a83cfc28a01df4a512df4efffdc9655fce25"
+}

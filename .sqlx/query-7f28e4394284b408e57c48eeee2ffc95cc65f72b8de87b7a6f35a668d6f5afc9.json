@@ -1,0 +1,146 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The first page of the requests the caller can decide, on artifacts it administers,\n-- newest first, optionally in one state, with one row of lookahead.\n-- Parameters $1 to $9 are the caller's facts for artifact.effective_level: tenant,\n-- principal, principal key, groups, their roles, Work Context, membership, labels and time.\nSELECT\n    r.access_request_id AS \"access_request_id: AccessRequestId\",\n    r.artifact_id AS \"artifact_id: ArtifactId\",\n    r.requester,\n    r.level,\n    r.justification,\n    r.state AS \"state: AccessRequestState\",\n    r.decided_by,\n    r.note,\n    r.created_at,\n    r.decided_at\nFROM artifact.access_request AS r\nJOIN artifact.artifact AS a ON a.tenant = r.tenant AND a.artifact_id = r.artifact_id\nWHERE r.tenant = $1\n    AND ($10::text IS NULL OR r.state = $10)\n    AND artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) = 3\nORDER BY r.access_request_id DESC\nLIMIT $11\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "access_request_id: AccessRequestId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "access_request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "requester",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "requester"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "justification",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "justification"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "state: AccessRequestState",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "decided_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "decided_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "decided_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "decided_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "Text",
+        "Text",
+        "TextArray",
+        "Timestamptz",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "7f28e4394284b408e57c48eeee2ffc95cc65f72b8de87b7a6f35a668d6f5afc9"
+}

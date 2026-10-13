@@ -1,0 +1,187 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The first page of the caller's uploads in one state, newest first, with one row of lookahead.\nSELECT\n    upload_id AS \"upload_id: UploadId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    creator AS \"creator: StoredPrincipal\",\n    form AS \"form: UploadForm\",\n    state AS \"state: UploadState\",\n    declared_size,\n    declared_sha256,\n    max_size,\n    reserved_bytes,\n    object_upload,\n    part_size,\n    created_at,\n    expires_at,\n    ended_at\nFROM artifact.upload\nWHERE tenant = $1 AND creator = $2 AND state = $3\nORDER BY upload_id DESC\nLIMIT $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "upload_id: UploadId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "upload_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "creator: StoredPrincipal",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "creator"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "form: UploadForm",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "form"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "state: UploadState",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "declared_size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "declared_size"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "declared_sha256",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "declared_sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "max_size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "max_size"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "reserved_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "reserved_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "object_upload",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "object_upload"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "part_size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "part_size"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "ended_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "ended_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "64465a70220edfd704dd93914dd7ca4e375f89ad52ff256bd54bf9852c55c532"
+}

@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The commit position up to which every record is sealed.\nSELECT s.txid::text::bigint AS \"txid!\", s.sequence\nFROM audit.sealer AS s\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "txid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "sequence",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.sealer",
+            "name": "sequence"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "d99ab236622af628885e83f25f7a89da9f6bbfc77ce251f2788c9780e03761ad"
+}

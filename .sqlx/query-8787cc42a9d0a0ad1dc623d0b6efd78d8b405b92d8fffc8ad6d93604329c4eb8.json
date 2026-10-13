@@ -1,0 +1,142 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Record a pending request. A requester holds at most one pending request per artifact,\n-- so a second one inserts nothing.\nINSERT INTO artifact.access_request AS r (\n    tenant, access_request_id, artifact_id, requester, level, justification, state, created_at\n)\nVALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)\nON CONFLICT (tenant, artifact_id, requester) WHERE state = 'pending' DO NOTHING\nRETURNING\n    r.access_request_id AS \"access_request_id: AccessRequestId\",\n    r.artifact_id AS \"artifact_id: ArtifactId\",\n    r.requester,\n    r.level,\n    r.justification,\n    r.state AS \"state: AccessRequestState\",\n    r.decided_by,\n    r.note,\n    r.created_at,\n    r.decided_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "access_request_id: AccessRequestId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "access_request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "requester",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "requester"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "justification",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "justification"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "state: AccessRequestState",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "decided_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "decided_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "decided_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "decided_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "8787cc42a9d0a0ad1dc623d0b6efd78d8b405b92d8fffc8ad6d93604329c4eb8"
+}

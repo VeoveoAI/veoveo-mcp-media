@@ -1,0 +1,119 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Record a share link by its secret's digest; the secret itself is never stored.\nINSERT INTO artifact.share_link (\n    tenant, share_link_id, artifact_id, secret_digest, expires_at, redemption_limit,\n    redemptions, created_by, created_at\n)\nVALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8)\nRETURNING\n    share_link_id AS \"share_link_id: ShareLinkId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    expires_at,\n    redemption_limit,\n    redemptions,\n    revoked_at,\n    created_by,\n    created_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "share_link_id: ShareLinkId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "share_link_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "redemption_limit",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "redemption_limit"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "redemptions",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "redemptions"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "revoked_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "revoked_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Timestamptz",
+        "Int4",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "339dfe94f89de0af6ccd6846f74da49a083ac104e5ae199bdd6662c3c46b0dd5"
+}

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the due pass settles the deadlines of the server's operations of every tenant)\n-- Mark up to $2 of server $1's pending operations whose deadline passed as unresolved,\n-- earliest first, and queue each Task parked on one. An unresolved operation still\n-- settles when a final event arrives later.\nWITH due AS (\n    SELECT task_id, operation_key\n    FROM tasks.task_operation\n    WHERE server = $1 AND deadline <= now() AND state IN ('dispatching', 'submitted')\n    ORDER BY deadline\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n),\nunresolved AS (\n    UPDATE tasks.task_operation AS o\n    SET state = 'unresolved', unresolved_at = now(), next_check_at = NULL\n    FROM due\n    WHERE o.task_id = due.task_id AND o.operation_key = due.operation_key\n    RETURNING o.task_id, o.operation_key\n),\nwoken AS (\n    UPDATE tasks.task AS task\n    SET status = 'queued', status_message = 'Queued', parked_on = NULL\n    FROM unresolved\n    WHERE task.id = unresolved.task_id AND task.parked_on = unresolved.operation_key\n        AND task.status = 'waiting'\n    RETURNING task.id\n)\nSELECT (SELECT count(*) FROM unresolved) AS \"unresolved!\", (SELECT count(*) FROM woken) AS \"woken!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "unresolved!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "woken!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "076a442fe66691b57b006d7efa6510356d3e5d5d79f746613d3b9a7480d3f881"
+}

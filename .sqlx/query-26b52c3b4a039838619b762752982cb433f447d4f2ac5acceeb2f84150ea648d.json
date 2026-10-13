@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The installation owner declares or replaces usage kinds. Repeating a declaration\n-- changes nothing.\nINSERT INTO usage.kind AS t (kind, service_category, unit, monetary)\nSELECT d.kind, d.category, d.unit, d.monetary\nFROM unnest($1::text[], $2::text[], $3::text[], $4::boolean[]) AS d (kind, category, unit, monetary)\nON CONFLICT ON CONSTRAINT kind_pkey DO UPDATE SET\n    service_category = excluded.service_category,\n    unit = excluded.unit,\n    monetary = excluded.monetary,\n    declared_at = now()\nWHERE t.server IS NULL\n    AND (t.service_category, t.unit, t.monetary)\n        IS DISTINCT FROM (excluded.service_category, excluded.unit, excluded.monetary)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "BoolArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "26b52c3b4a039838619b762752982cb433f447d4f2ac5acceeb2f84150ea648d"
+}

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The partition's newest signed head.\nSELECT h.sequence, h.last_position, h.head_hash\nFROM audit.partition_head AS h\nWHERE h.partition = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sequence",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.partition_head",
+            "name": "sequence"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "last_position",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.partition_head",
+            "name": "last_position"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "head_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.partition_head",
+            "name": "head_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3bd237c9e909631b086bc26d041faf390950841b5314d7ccbdbb5ed879bb2bd2"
+}

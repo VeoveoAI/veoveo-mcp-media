@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Delete up to $2 of server $1's finished Tasks whose retention expired and that no\n-- consumer pins, earliest expiry first. A Task with an operation that has not settled\n-- stays, so a late event still finds it. Their inputs, steps and operations cascade. A\n-- Task another transaction holds waits for a later batch.\n-- veoveo: all tenants (retention removes the server's expired Tasks of every tenant)\nDELETE FROM tasks.task\nWHERE id IN (\n    SELECT id\n    FROM tasks.task\n    WHERE server = $1\n        AND status IN ('succeeded', 'failed', 'cancelled')\n        AND retention_pins = '{}'\n        AND retention_expires_at <= now()\n        AND NOT EXISTS (\n            SELECT FROM tasks.task_operation AS o\n            WHERE o.task_id = task.id AND o.state <> 'settled'\n        )\n    ORDER BY retention_expires_at\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5ed44e1183137fb102d9912c873da788dd27fc15b780907524707d74f61555b1"
+}

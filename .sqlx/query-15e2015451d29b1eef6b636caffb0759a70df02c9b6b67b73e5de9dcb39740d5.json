@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The tenant's usage and limits, with the usage row locked until the reservation\n-- commits, so two uploads cannot both take the last of a quota.\nSELECT\n    u.stored_bytes,\n    u.reserved_bytes,\n    u.open_uploads,\n    l.quota_bytes AS \"quota_bytes?\",\n    l.largest_object_bytes AS \"largest_object_bytes?\",\n    l.allowed_media_types AS \"allowed_media_types?\",\n    l.active_uploads AS \"active_uploads?\"\nFROM artifact.storage_usage AS u\nLEFT JOIN artifact.upload_limits AS l ON l.tenant = u.tenant\nWHERE u.tenant = $1\nFOR UPDATE OF u\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "stored_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.storage_usage",
+            "name": "stored_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reserved_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.storage_usage",
+            "name": "reserved_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "open_uploads",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "artifact.storage_usage",
+            "name": "open_uploads"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "quota_bytes?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload_limits",
+            "name": "quota_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "largest_object_bytes?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload_limits",
+            "name": "largest_object_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "allowed_media_types?",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload_limits",
+            "name": "allowed_media_types"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "active_uploads?",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload_limits",
+            "name": "active_uploads"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "15e2015451d29b1eef6b636caffb0759a70df02c9b6b67b73e5de9dcb39740d5"
+}

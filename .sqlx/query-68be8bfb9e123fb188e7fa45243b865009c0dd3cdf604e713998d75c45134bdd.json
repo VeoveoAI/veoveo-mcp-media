@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the sweep prunes every tenant's decided access requests in batches)\n-- Delete one batch of access requests decided or cancelled before the cutoff.\nWITH due AS (\n    SELECT tenant, access_request_id\n    FROM artifact.access_request\n    WHERE decided_at < $1 AND decided_at IS NOT NULL\n    ORDER BY decided_at\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n)\nDELETE FROM artifact.access_request AS r\nUSING due\nWHERE r.tenant = due.tenant AND r.access_request_id = due.access_request_id\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "68be8bfb9e123fb188e7fa45243b865009c0dd3cdf604e713998d75c45134bdd"
+}

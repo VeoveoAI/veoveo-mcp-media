@@ -1,0 +1,91 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- One subject's grant on an artifact.\nSELECT subject_kind, subject, level, expires_at, granted_by, granted_at\nFROM artifact.grant\nWHERE tenant = $1 AND artifact_id = $2 AND subject_kind = $3 AND subject = $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.\"grant\"",
+            "name": "subject_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.\"grant\"",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.\"grant\"",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.\"grant\"",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "granted_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.\"grant\"",
+            "name": "granted_by"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "granted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.\"grant\"",
+            "name": "granted_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "ccfd1d49ad5e5a52549634cd6d80936465453579109115f7b02aa5bf03bf0b1d"
+}

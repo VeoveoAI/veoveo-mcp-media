@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Record the calling server's class declarations through its own login.\nSELECT audit.declare_server_classes($1::text[], $2::jsonb[], $3::integer[], $4::smallint[])\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "declare_server_classes",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "JsonbArray",
+        "Int4Array",
+        "Int2Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3d48e5e324fb0ed1fc6b19efff335733b16d757fd097bb619d14d735c4ea0902"
+}

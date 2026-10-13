@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the due pass reads the server's next due time across every tenant)\n-- The earliest time server $1's due pass has work: a parked Task's next check or a\n-- pending operation's deadline.\nSELECT least(\n    (\n        SELECT min(o.next_check_at)\n        FROM tasks.task_operation AS o\n        JOIN tasks.task AS parked\n            ON parked.id = o.task_id AND parked.parked_on = o.operation_key\n        WHERE o.server = $1 AND o.next_check_at IS NOT NULL\n            AND o.state IN ('dispatching', 'submitted') AND parked.status = 'waiting'\n    ),\n    (\n        SELECT min(deadline)\n        FROM tasks.task_operation\n        WHERE server = $1 AND state IN ('dispatching', 'submitted')\n    )\n) AS \"due\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "due",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5a57834c737015a216e533b21740a812c3af8c5f187a9d2668fde44dc2f4492b"
+}

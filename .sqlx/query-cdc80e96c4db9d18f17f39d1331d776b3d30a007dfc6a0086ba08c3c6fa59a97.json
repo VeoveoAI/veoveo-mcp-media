@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT audit.append($1, $2)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "append",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "JsonbArray",
+        "TimestamptzArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "cdc80e96c4db9d18f17f39d1331d776b3d30a007dfc6a0086ba08c3c6fa59a97"
+}

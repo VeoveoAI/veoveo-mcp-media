@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\n-- The owning worker records the provider's answer to the cancellation, once.\nWITH parent AS (\n    SELECT id\n    FROM tasks.task\n    WHERE id = $1 AND server = $2 AND owner_instance = $3 AND status = 'cancel_requested'\n    FOR SHARE\n)\nUPDATE tasks.task_operation AS o\nSET cancel_receipt = $5, cancel_recorded_at = now()\nFROM parent\nWHERE o.task_id = parent.id AND o.operation_key = $4 AND o.cancel_receipt IS NULL\n    AND o.cancel_started_at IS NOT NULL\nRETURNING o.cancel_receipt AS \"cancel_receipt!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cancel_receipt!",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "cancel_receipt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ee68b237bf6160ed3a2f8cf812e06097d853b81b057c24eb9c014824b144c9be"
+}

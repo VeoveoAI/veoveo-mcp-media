@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Give the tenant a usage row, so a reservation can lock it.\nINSERT INTO artifact.storage_usage (tenant, stored_bytes, reserved_bytes, open_uploads)\nVALUES ($1, 0, 0, 0)\nON CONFLICT (tenant) DO NOTHING\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "abb6aed26e564baf35d100275ad877dfab5862e10bb57ed5cce61485ff61b73e"
+}

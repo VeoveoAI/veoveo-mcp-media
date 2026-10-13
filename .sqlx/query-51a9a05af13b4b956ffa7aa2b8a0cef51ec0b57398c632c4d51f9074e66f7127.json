@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Remove a subject's grant on an artifact.\nDELETE FROM artifact.grant\nWHERE tenant = $1 AND artifact_id = $2 AND subject_kind = $3 AND subject = $4\nRETURNING subject\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.\"grant\"",
+            "name": "subject"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "51a9a05af13b4b956ffa7aa2b8a0cef51ec0b57398c632c4d51f9074e66f7127"
+}

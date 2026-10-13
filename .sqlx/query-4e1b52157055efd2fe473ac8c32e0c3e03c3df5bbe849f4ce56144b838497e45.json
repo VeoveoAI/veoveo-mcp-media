@@ -1,0 +1,92 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The caller's own committed audit-view receipt for the partition, if it is current.\nSELECT\n    r.id AS \"id: AuditRecordId\",\n    r.partition,\n    r.class AS \"class: AuditClass\",\n    r.occurred_at,\n    r.draft,\n    r.recorded_at\nFROM audit.record AS r\nWHERE r.id = $1\n    AND r.partition = $2\n    AND r.actor = $3\n    AND r.draft -> 'detail' -> 'partition' = $4\n    AND r.class = $5\n    AND r.outcome = 'success'\n    AND r.occurred_at > now() - interval '15 minutes'\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: AuditRecordId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "audit.record",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "partition",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.record",
+            "name": "partition"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "class: AuditClass",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.record",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "occurred_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit.record",
+            "name": "occurred_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "draft",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "audit.record",
+            "name": "draft"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "recorded_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit.record",
+            "name": "recorded_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4e1b52157055efd2fe473ac8c32e0c3e03c3df5bbe849f4ce56144b838497e45"
+}

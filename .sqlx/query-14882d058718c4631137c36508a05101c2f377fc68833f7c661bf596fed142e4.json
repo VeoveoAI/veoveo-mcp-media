@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- How many grants an artifact holds, and whether the subject already holds one.\nSELECT\n    count(*) AS \"grants!\",\n    count(*) FILTER (WHERE subject_kind = $3 AND subject = $4) AS \"held!\"\nFROM artifact.grant\nWHERE tenant = $1 AND artifact_id = $2\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grants!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "held!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "14882d058718c4631137c36508a05101c2f377fc68833f7c661bf596fed142e4"
+}

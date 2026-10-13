@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Every declared class with its OCSF class and activity and its detail schema, for a\n-- reader's registry.\n-- veoveo: unbounded (one row per declared class; each owner declares a fixed vocabulary)\n-- veoveo: scan (a reader's registry needs every declaration)\nSELECT\n    t.class AS \"class: AuditClass\",\n    t.schema,\n    t.ocsf_class_uid,\n    t.ocsf_activity_id\nFROM audit.detail_type AS t\nORDER BY t.class\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "class: AuditClass",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.detail_type",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "schema",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "audit.detail_type",
+            "name": "schema"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ocsf_class_uid",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "audit.detail_type",
+            "name": "ocsf_class_uid"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "ocsf_activity_id",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "audit.detail_type",
+            "name": "ocsf_activity_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "05734356da6b77e0a710d802dcaad4dda169da647108c0ac9ca66bb984724d65"
+}

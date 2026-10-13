@@ -1,0 +1,93 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\n-- The owning worker asks for input; the Task waits until a caller answers.\nWITH parent AS (\n    UPDATE tasks.task\n    SET status = 'waiting', status_message = 'Waiting for input'\n    WHERE id = $1 AND server = $2 AND owner_instance = $3 AND status IN ('running', 'waiting')\n    RETURNING id\n)\nINSERT INTO tasks.task_input (task_id, request_key, kind, params)\nSELECT id, $4, $5, $6 FROM parent\nRETURNING request_key, kind, params, response, created_at, responded_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_input",
+            "name": "request_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_input",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "params",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_input",
+            "name": "params"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "response",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_input",
+            "name": "response"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_input",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "responded_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_input",
+            "name": "responded_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "404218ab0e1dc6bafcc3cd13cd99b5b4e7b6345bbf355ede2f2801956248f8fe"
+}

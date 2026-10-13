@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the exporter serves every partition, least recently served first)\n-- The next block one destination has not acknowledged, from the partition it served\n-- least recently. Partition heads, cursors and anchors select it; block history is not\n-- scanned.\nSELECT\n    b.partition AS \"partition?\",\n    b.sequence AS \"sequence?\",\n    b.head_hash AS \"head_hash?\",\n    b.sealed_at AS \"sealed_at?\",\n    b.block AS \"block?\"\nFROM audit.partition_head AS h\nLEFT JOIN audit.export_cursor AS c ON c.destination = $1 AND c.partition = h.partition\nLEFT JOIN audit.retention_anchor AS a ON a.partition = h.partition\nLEFT JOIN audit.block AS b\n    ON b.partition = h.partition\n    AND b.sequence = greatest(coalesce(c.sequence, 0), coalesce(a.sequence, 0)) + 1\nWHERE h.sequence > greatest(coalesce(c.sequence, 0), coalesce(a.sequence, 0))\nORDER BY c.delivered_at NULLS FIRST, h.partition\nLIMIT 1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "partition?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "partition"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "sequence?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "sequence"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "head_hash?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "head_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "sealed_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "sealed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "block?",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "block"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5f2c173507dac04e07784b662cf1e948289b45ed9c2d0a3d4b648b5aad26db88"
+}

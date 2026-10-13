@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- How many of an artifact's share links are live: neither revoked nor expired.\nSELECT count(*) AS \"live!\"\nFROM artifact.share_link\nWHERE tenant = $1 AND artifact_id = $2 AND revoked_at IS NULL AND expires_at > $3\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "live!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9eb5ac51a8dc82300b79c2f418ae6e1e0f4e410e8e74e8e278265ac6c0b4aff6"
+}

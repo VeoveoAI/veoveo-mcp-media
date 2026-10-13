@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The object store's identifier for an open multipart upload.\nUPDATE artifact.upload\nSET object_upload = $3\n-- `ended_at` is null exactly while the upload is open.\nWHERE tenant = $1 AND upload_id = $2 AND ended_at IS NULL AND object_upload IS NULL\nRETURNING upload_id AS \"upload_id: UploadId\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "upload_id: UploadId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "upload_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "aacba01264140885de34008a814dddb59b18f318a97860efe5a3ea860af93fd0"
+}

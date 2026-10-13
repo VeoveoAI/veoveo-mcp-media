@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- One page of a partition's daily counts, newest day first, then by class and outcome.\n-- After a cursor the days stop at the cursor's day, a bound that stays an index range in\n-- a generic plan; the cursor's own day continues after its class and outcome.\n-- veoveo: scan (the cursor's own day is filtered by class and outcome inside the day range the index seeks)\nSELECT\n    d.day AS \"day!\",\n    d.class AS \"class!: AuditClass\",\n    d.outcome AS \"outcome!: AuditOutcome\",\n    d.count AS \"count!\"\nFROM audit.daily AS d\nWHERE d.partition = $1\n    AND d.day >= $2\n    AND d.day < $3\n    AND d.day <= coalesce($4::timestamptz, $3)\n    AND (\n        $4::timestamptz IS NULL\n        OR d.day < $4\n        OR (d.day = $4 AND (d.class, d.outcome) > ($5::text, $6::text))\n    )\nORDER BY d.day DESC, d.class, d.outcome\nLIMIT $7\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit.daily",
+            "name": "day"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "class!: AuditClass",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.daily",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "outcome!: AuditOutcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.daily",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.daily",
+            "name": "count"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "e882dcfb7ec3c38e6a35500831cedfed1d67fc373096808da66cdab0c33c39b9"
+}

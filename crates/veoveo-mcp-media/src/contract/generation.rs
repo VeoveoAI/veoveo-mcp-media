@@ -1,0 +1,155 @@
+//! Generations: the arguments of `run`, a prediction as Media tracks it, and the result a
+//! finished run returns. A result links its outputs by their Artifact addresses and never
+//! carries a download URL.
+use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use veoveo_types::{ResourceUri, TaskId, Vocabulary};
+
+use super::{ListCursor, MediaModelId, MediaPredictionId, MediaResource};
+
+/// The format of a generation result.
+pub const GENERATION_FORMAT: &str = "https://veoveo.ai/formats/media-generation";
+/// The text a finished run returns beside its structured result.
+pub const GENERATION_COMPLETED: &str = "Generation completed.";
+
+/// The arguments of `run`, which runs as a Task.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RunRequest {
+    /// The model to run. Browse `media://models` or complete the model template.
+    pub model: MediaModelId,
+    /// The model's input, which must satisfy the schema at `media://model/{+model_id}`.
+    pub input: Map<String, Value>,
+}
+
+/// Where a generation stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Vocabulary)]
+pub enum PredictionStatus {
+    /// The run waits for a worker.
+    Queued,
+    /// The provider accepted the run and Media waits for its outcome.
+    Processing,
+    /// The provider finished, and Media stores the outputs in Artifact.
+    Storing,
+    /// Every output is stored.
+    Succeeded,
+    /// The provider or Media could not finish the run.
+    Failed,
+    /// The run was cancelled.
+    Cancelled,
+    /// The provider reported no outcome before the deadline. A late report still
+    /// settles the provider's job, but the run has ended.
+    Unresolved,
+}
+
+impl PredictionStatus {
+    /// Whether the run has ended.
+    pub fn is_final(self) -> bool {
+        matches!(
+            self,
+            Self::Succeeded | Self::Failed | Self::Cancelled | Self::Unresolved
+        )
+    }
+}
+
+/// A prediction as Media tracks it, without the run's input.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PredictionSummary {
+    /// The Task that runs the generation.
+    #[schemars(with = "String")]
+    pub task_id: TaskId,
+    /// The provider's identity of the generation, once the provider accepted it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prediction_id: Option<MediaPredictionId>,
+    pub model_id: MediaModelId,
+    pub status: PredictionStatus,
+    /// Why the run failed, when it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub output_count: u32,
+    pub created_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+/// One output of a generation, stored in Artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GeneratedArtifact {
+    /// The output's position in the provider's output order.
+    pub index: u32,
+    /// The artifact's address, `artifact://artifacts/{artifact_id}`. Read it, or call
+    /// Artifact's `create_download`, to reach the bytes.
+    #[schemars(with = "String")]
+    pub artifact_uri: ResourceUri,
+    pub media_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+}
+
+/// What a finished run returns: the prediction, its result address and its outputs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GenerationResult {
+    /// `https://veoveo.ai/formats/media-generation`.
+    pub format: String,
+    #[schemars(with = "String")]
+    pub task_id: TaskId,
+    /// `media://prediction/{prediction_id}/result`, where this result stays readable.
+    pub result_uri: MediaResource,
+    pub prediction: PredictionSummary,
+    pub artifacts: Vec<GeneratedArtifact>,
+}
+
+/// One prediction in a listing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PredictionEntry {
+    /// `media://prediction/{prediction_id}`, once the provider accepted the run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prediction_uri: Option<MediaResource>,
+    pub prediction: PredictionSummary,
+}
+
+/// A page of the caller's predictions, newest first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PredictionListing {
+    pub predictions: Vec<PredictionEntry>,
+    /// The cursor of the next page, or `null` on the last page.
+    pub next_cursor: Option<ListCursor>,
+}
+
+/// One prediction and, once it succeeded, its result's address.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PredictionView {
+    pub prediction: PredictionSummary,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_uri: Option<MediaResource>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn statuses_use_snake_case_and_final_ones_end_the_run() {
+        assert_eq!(PredictionStatus::Processing.as_str(), "processing");
+        for status in PredictionStatus::ALL {
+            assert_eq!(
+                status.is_final(),
+                !matches!(
+                    status,
+                    PredictionStatus::Queued
+                        | PredictionStatus::Processing
+                        | PredictionStatus::Storing
+                ),
+                "{status}"
+            );
+        }
+    }
+}

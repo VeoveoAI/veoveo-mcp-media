@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the sweep deletes every tenant's artifacts whose retention passed)\n-- Mark one batch of artifacts past their retention as deleting, oldest first.\nWITH due AS (\n    SELECT tenant, artifact_id\n    FROM artifact.artifact\n    WHERE retain_until <= $1 AND retain_until IS NOT NULL AND state IN ('verifying', 'available')\n    ORDER BY retain_until\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n)\nUPDATE artifact.artifact AS a\nSET state = 'deleting', deleting_at = $1\nFROM due\nWHERE a.tenant = due.tenant AND a.artifact_id = due.artifact_id\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6b93836f9220bd32114e041e83fd85975232a865838122f2b2b7a7f039cfe359"
+}

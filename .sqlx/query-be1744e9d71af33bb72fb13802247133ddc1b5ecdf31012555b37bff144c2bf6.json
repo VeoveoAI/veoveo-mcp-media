@@ -1,0 +1,114 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The first page of an artifact's share links, newest first, with one row of lookahead.\nSELECT\n    share_link_id AS \"share_link_id: ShareLinkId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    expires_at,\n    redemption_limit,\n    redemptions,\n    revoked_at,\n    created_by,\n    created_at\nFROM artifact.share_link\nWHERE tenant = $1 AND artifact_id = $2\nORDER BY share_link_id DESC\nLIMIT $3\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "share_link_id: ShareLinkId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "share_link_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "redemption_limit",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "redemption_limit"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "redemptions",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "redemptions"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "revoked_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "revoked_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "be1744e9d71af33bb72fb13802247133ddc1b5ecdf31012555b37bff144c2bf6"
+}

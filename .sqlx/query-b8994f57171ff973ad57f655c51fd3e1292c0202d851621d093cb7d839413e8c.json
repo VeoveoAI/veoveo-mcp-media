@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Record a run of the owner's when its Task starts. A repeat changes nothing.\nINSERT INTO media.prediction (\n    tenant, task_id, owner, data_labels, model_id, status, outputs, created_at, updated_at\n)\nVALUES ($1, $2, $3, $4, $5, 'queued', '[]', $6, $6)\nON CONFLICT (tenant, task_id) DO NOTHING\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b8994f57171ff973ad57f655c51fd3e1292c0202d851621d093cb7d839413e8c"
+}

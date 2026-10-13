@@ -1,0 +1,105 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A tenant's daily totals over [$2, $3), in day, principal, kind, phase and currency order.\nSELECT\n    day AS \"day!\",\n    principal AS \"principal!\",\n    kind AS \"kind!\",\n    phase AS \"phase!\",\n    currency AS \"currency!\",\n    quantity::text AS \"quantity!\",\n    amount::text AS \"amount!\",\n    records AS \"records!\"\nFROM usage.daily\nWHERE tenant = $1 AND day >= $2 AND day < $3\nORDER BY day, principal, source, kind, phase, currency\nLIMIT $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day!",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "usage.daily",
+            "name": "day"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "principal!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "usage.daily",
+            "name": "principal"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "usage.daily",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "phase!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "usage.daily",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "usage.daily",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "quantity!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "amount!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "records!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "usage.daily",
+            "name": "records"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Date",
+        "Date",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "8bdc5d73d80c81b515d2bde6ef905ca9e70d3a3029e6fcceff6d459ade260931"
+}

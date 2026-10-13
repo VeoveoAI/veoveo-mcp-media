@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The artifact's upload ended without usable bytes: aborted, expired, or holding bytes\n-- that did not match what it declared. It holds no size, so triggers release any stored\n-- bytes it counted.\nUPDATE artifact.artifact\nSET state = 'failed', size_bytes = NULL, sha256 = NULL, failed_at = $3\nWHERE tenant = $1 AND artifact_id = $2 AND state IN ('uploading', 'verifying')\nRETURNING artifact_id AS \"artifact_id: ArtifactId\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "artifact_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "107ccc73b7b1305ad6a7def71b6ef916d141a76c8179ab969d64164f417f5ead"
+}

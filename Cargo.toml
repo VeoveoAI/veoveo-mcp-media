@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "Apache-2.0"
-repository = "https://github.com/VeoveoAI/veoveo-template-mcp-rust"
+repository = "https://github.com/VeoveoAI/veoveo-mcp-media"
 publish = false
 
 [workspace.dependencies]
@@ -15,14 +15,58 @@ publish = false
 veoveo-platform-store = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72" }
 veoveo-test-fixtures = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72" }
 veoveo-types = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72" }
+veoveo-audit = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72" }
+veoveo-audit-contract = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72" }
+veoveo-task-runtime = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72" }
+veoveo-usage = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72" }
+# RFC 7523 client assertions for the acceptance callers.
+veoveo-oauth-client = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72" }
+# The Rust SDK for Veoveo MCP servers: the contract feature for declarations and typed
+# calls, the server feature for hosting, registration, Task work, operations, usage and
+# calls to other servers.
+veoveo-sdk-rust = { git = "https://github.com/VeoveoAI/veoveo-sdk-rust", rev = "25d9ea53ba5f7479a26af361a70f368a3be1b8da", default-features = false }
+# Artifact, where Media stores what a provider generates: its `client` feature in the
+# server, its hosted server in the tests that run Artifact in process. Artifact pins the
+# same SDK revision, so one SDK serves both.
+veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "e464edff45767ab4b8233e2678b2c6bb0ea06ddc", default-features = false }
 
+anyhow = "=1.0.104"
+# The fake provider's HTTP server and the server's public callback route.
+axum = { version = "0.8.9", default-features = false }
+bytes = "1.12.1"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+dotenvy = "0.15.7"
+futures = "0.3.34"
+hex = "=0.4.3"
+# The provider signs its webhooks with HMAC-SHA256.
+hmac = "0.13.0"
+# Model input admission against the provider's published JSON Schema.
+jsonschema = { version = "0.58.6", default-features = false }
+# The SDK's HTTP client release; the provider client and the tests share it.
+reqwest = { version = "=0.13.5", default-features = false }
+# The rmcp fork the SDK pins; Media's tool router uses its macros.
+rmcp = { version = "=3.5.0", git = "https://github.com/VeoveoAI/rust-sdk", rev = "917e7914c93975fc1eddbff8792f1e2de933bc17" }
+rustls = { version = "0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
+secrecy = "0.10.3"
+# The release the SDK pins exactly.
+sha2 = "=0.11.0"
+tokio-util = "0.7.20"
+tracing = "0.1.44"
+url = "=2.5.8"
+
+# Date and time without a clock in the contract; the server enables `clock`. The exact
+# release matches veoveo-types.
+chrono = { version = "=0.4.45", default-features = false, features = ["serde", "std"] }
+schemars = { version = "1.2.2", features = ["chrono04", "uuid1"] }
 serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
 # PostgreSQL 18 through the same sqlx release and features as veoveo-core. `sqlx-toml`
 # reads the crate's migration table from its `sqlx.toml`.
 sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring-native-roots", "uuid", "chrono", "json", "migrate", "macros", "sqlx-toml"] }
 thiserror = "=2.0.21"
 tokio = "1.53.1"
-uuid = { version = "1.24.1", features = ["serde", "v7"] }
+# The exact release veoveo-types pins.
+uuid = { version = "=1.25.0", default-features = false, features = ["serde", "std", "v7"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

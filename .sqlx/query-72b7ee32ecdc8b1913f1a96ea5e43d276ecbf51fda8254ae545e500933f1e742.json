@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A Task's cost per kind and currency: its actual records of a kind when it has any,\n-- else its estimates of that kind.\nWITH task_records AS (\n    SELECT kind, phase, currency, quantity, amount\n    FROM usage.record\n    WHERE tenant = $1 AND task_id = $2\n),\nchosen AS (\n    SELECT r.kind, r.phase, r.currency, r.quantity, r.amount\n    FROM task_records AS r\n    WHERE r.phase = 'actual' OR NOT EXISTS (\n        SELECT FROM task_records AS a WHERE a.kind = r.kind AND a.phase = 'actual'\n    )\n)\nSELECT\n    c.kind AS \"kind!\",\n    k.unit AS \"unit!\",\n    c.phase AS \"phase!\",\n    c.currency AS \"currency!\",\n    sum(c.quantity)::text AS \"quantity!\",\n    sum(c.amount)::text AS \"amount\"\nFROM chosen AS c\nJOIN usage.kind AS k ON k.kind = c.kind\nGROUP BY c.kind, k.unit, c.phase, c.currency\nORDER BY c.kind, c.currency\nLIMIT 256\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "usage.record",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "unit!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "usage.kind",
+            "name": "unit"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "phase!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "usage.record",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "usage.record",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "quantity!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "amount",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "72b7ee32ecdc8b1913f1a96ea5e43d276ecbf51fda8254ae545e500933f1e742"
+}

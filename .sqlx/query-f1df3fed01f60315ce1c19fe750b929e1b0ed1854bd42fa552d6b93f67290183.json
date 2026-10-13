@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the sweep prunes every tenant's ended share links in batches)\n-- Delete one batch of share links that expired or were revoked before the cutoff.\nWITH due AS (\n    SELECT tenant, share_link_id\n    FROM artifact.share_link\n    WHERE coalesce(revoked_at, expires_at) < $1\n    ORDER BY coalesce(revoked_at, expires_at)\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n)\nDELETE FROM artifact.share_link AS s\nUSING due\nWHERE s.tenant = due.tenant AND s.share_link_id = due.share_link_id\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f1df3fed01f60315ce1c19fe750b929e1b0ed1854bd42fa552d6b93f67290183"
+}

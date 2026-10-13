@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The tenant's stored and reserved bytes. A tenant without a row has stored nothing.\nSELECT stored_bytes, reserved_bytes\nFROM artifact.storage_usage\nWHERE tenant = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "stored_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.storage_usage",
+            "name": "stored_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reserved_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.storage_usage",
+            "name": "reserved_bytes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "6f81b6c70f14930fb542b60aa41aa46f1111dc30f06657a6d42882702bcbd85e"
+}

@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The partition's newest signed head and its last retired block, read in one snapshot.\nSELECT\n    h.sequence AS \"sequence?\",\n    h.last_position AS \"last_position?\",\n    h.head_hash AS \"head_hash?\",\n    a.sequence AS \"retired?\"\nFROM (SELECT $1::text AS partition) AS p\nLEFT JOIN audit.partition_head AS h ON h.partition = p.partition\nLEFT JOIN audit.retention_anchor AS a ON a.partition = p.partition\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sequence?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.partition_head",
+            "name": "sequence"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "last_position?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.partition_head",
+            "name": "last_position"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "head_hash?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.partition_head",
+            "name": "head_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "retired?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.retention_anchor",
+            "name": "sequence"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "ace911337faa4d48411841388d20eb43942d41afc36fefc16012f0c0013c2a4b"
+}

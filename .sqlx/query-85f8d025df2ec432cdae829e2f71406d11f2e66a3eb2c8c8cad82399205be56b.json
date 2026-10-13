@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The installation owner creates the monthly record partitions through a month.\nSELECT usage.prepare_partitions($1) AS \"created!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "created!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "85f8d025df2ec432cdae829e2f71406d11f2e66a3eb2c8c8cad82399205be56b"
+}

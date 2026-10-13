@@ -1,0 +1,270 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- One operation of this server's Task.\nSELECT\n    task_id, operation_key, operation_id AS \"operation_id: StepOperationId\", provider,\n    external_id, state, completion, check_first_ms, check_interval_ms, check_backoff,\n    check_limit, checks_made, next_check_at, deadline, outcome, dispatched_at, submitted_at,\n    settled_at, unresolved_at, cancel_started_at, cancel_receipt\nFROM tasks.task_operation\nWHERE task_id = $1 AND operation_key = $2 AND server = $3\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "task_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "operation_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "operation_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "operation_id: StepOperationId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "operation_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "external_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "external_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "completion",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "completion"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "check_first_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "check_first_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "check_interval_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "check_interval_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "check_backoff",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "check_backoff"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "check_limit",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "check_limit"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "checks_made",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "checks_made"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "next_check_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "next_check_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "deadline",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "deadline"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "outcome",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "dispatched_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "dispatched_at"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "submitted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "submitted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "settled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "settled_at"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "unresolved_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "unresolved_at"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "cancel_started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "cancel_started_at"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "cancel_receipt",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "cancel_receipt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "5304c08c03d811c4680f42b1e2e4bb234c61ec354edef5273b579acac85c066f"
+}

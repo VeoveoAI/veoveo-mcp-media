@@ -1,0 +1,182 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\n-- The owning worker records an operation before its dispatch, or reads the operation an\n-- earlier attempt recorded. The Task's row stays locked until the statement commits, so\n-- the instance keeps the Task between the ownership check and the write.\nWITH parent AS (\n    SELECT id, server\n    FROM tasks.task\n    WHERE id = $1 AND server = $2 AND owner_instance = $3\n        AND status IN ('running', 'waiting', 'cancel_requested')\n    FOR SHARE\n),\ndispatched AS (\n    INSERT INTO tasks.task_operation (\n        task_id, operation_key, operation_id, server, provider, completion, check_first_ms,\n        check_interval_ms, check_backoff, check_limit, deadline, callback_digest\n    )\n    SELECT id, $4, $5, server, $6, $7, $8, $9, $10, $11, $12, $13 FROM parent\n    ON CONFLICT (task_id, operation_key) DO NOTHING\n    RETURNING\n        task_id, operation_key, operation_id, provider, external_id, state, completion,\n        check_first_ms, check_interval_ms, check_backoff, check_limit, checks_made,\n        next_check_at, deadline, outcome, dispatched_at, submitted_at, settled_at,\n        unresolved_at, cancel_started_at, cancel_receipt\n)\nSELECT\n    task_id AS \"task_id!\",\n    operation_key AS \"operation_key!\",\n    operation_id AS \"operation_id!: StepOperationId\",\n    provider AS \"provider!\",\n    external_id,\n    state AS \"state!\",\n    completion AS \"completion!\",\n    check_first_ms,\n    check_interval_ms,\n    check_backoff,\n    check_limit,\n    checks_made AS \"checks_made!\",\n    next_check_at,\n    deadline AS \"deadline!\",\n    outcome,\n    dispatched_at AS \"dispatched_at!\",\n    submitted_at,\n    settled_at,\n    unresolved_at,\n    cancel_started_at,\n    cancel_receipt,\n    true AS \"first!\"\nFROM dispatched\nUNION ALL\nSELECT\n    o.task_id, o.operation_key, o.operation_id, o.provider, o.external_id, o.state,\n    o.completion, o.check_first_ms, o.check_interval_ms, o.check_backoff, o.check_limit,\n    o.checks_made, o.next_check_at, o.deadline, o.outcome, o.dispatched_at, o.submitted_at,\n    o.settled_at, o.unresolved_at, o.cancel_started_at, o.cancel_receipt, false\nFROM tasks.task_operation AS o\nJOIN parent ON parent.id = o.task_id\nWHERE o.operation_key = $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "operation_key!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "operation_id!: StepOperationId",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "provider!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "external_id",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "state!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "completion!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "check_first_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "check_interval_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "check_backoff",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "check_limit",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "checks_made!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "next_check_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "deadline!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "outcome",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 15,
+        "name": "dispatched_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 16,
+        "name": "submitted_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 17,
+        "name": "settled_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
+        "name": "unresolved_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "cancel_started_at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 20,
+        "name": "cancel_receipt",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 21,
+        "name": "first!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Float8",
+        "Int4",
+        "Timestamptz",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "62d5cc925ddc1a53e99145c798e145e697bc004b55565a3a8fcd1916884ff1b4"
+}

@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A tenant's own upload limits. A tenant without a row has the default limits.\nSELECT quota_bytes, largest_object_bytes, allowed_media_types, active_uploads\nFROM artifact.upload_limits\nWHERE tenant = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "quota_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload_limits",
+            "name": "quota_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "largest_object_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload_limits",
+            "name": "largest_object_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "allowed_media_types",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload_limits",
+            "name": "allowed_media_types"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "active_uploads",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload_limits",
+            "name": "active_uploads"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "d50aa94e12927ae60ea97b3b4186d7ebdc39d777be5df16f251b1fe31289ce4b"
+}

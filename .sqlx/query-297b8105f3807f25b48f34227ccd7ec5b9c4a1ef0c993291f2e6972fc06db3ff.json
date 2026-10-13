@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a status check names a run by its Task, whose identity is unique across tenants)\n-- The status endpoint a run's provider named for its prediction.\nSELECT status_url\nFROM media.prediction\nWHERE task_id = $1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "status_url"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "297b8105f3807f25b48f34227ccd7ec5b9c4a1ef0c993291f2e6972fc06db3ff"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A page plans with its actual filters, so an actor, trace or time filter seeks its index\n-- even after the connection has run the statement many times.\nSET LOCAL plan_cache_mode = force_custom_plan\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "94bbe22ea22570fae822cb7e66c180e615b8710abc4685a0385710aa2c5f302f"
+}

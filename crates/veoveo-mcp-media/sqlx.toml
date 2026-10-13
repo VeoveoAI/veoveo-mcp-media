@@ -1,0 +1,5 @@
+# Read by `sqlx::migrate!()` in this crate and by `cargo sqlx migrate --config`. The
+# server's migrations record their history in its own schema, which the Gateway creates
+# when the server registers.
+[migrate]
+table-name = "media._sqlx_migrations"

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The provider finished the run, and Media stores its outputs.\nUPDATE media.prediction\nSET status = 'storing', prediction_id = COALESCE(prediction_id, $3), updated_at = $4\nWHERE tenant = $1 AND task_id = $2 AND completed_at IS NULL\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "00f033ef3a9c7294bfb0a0d241f1f9611ba10039c42f41364b3ca84ffe25abc4"
+}

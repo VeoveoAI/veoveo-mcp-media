@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- End the run with its final status, its error or its stored outputs. An ended run keeps\n-- its first ending.\nUPDATE media.prediction\nSET status = $3,\n    error = $4,\n    outputs = $5,\n    prediction_id = COALESCE(prediction_id, $6),\n    completed_at = $7,\n    updated_at = $7\nWHERE tenant = $1 AND task_id = $2 AND completed_at IS NULL\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "58f6b112304efb3b4e13955f4c9696db4e7813e215172829edd3984f7e0f7e0e"
+}

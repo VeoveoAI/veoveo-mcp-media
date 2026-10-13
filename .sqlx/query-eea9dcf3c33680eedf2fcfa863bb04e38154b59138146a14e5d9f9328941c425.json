@@ -1,0 +1,139 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The first page of the requests the caller made, newest first, optionally in one state,\n-- with one row of lookahead. A request on a deleted artifact is gone for its requester.\nSELECT\n    r.access_request_id AS \"access_request_id: AccessRequestId\",\n    r.artifact_id AS \"artifact_id: ArtifactId\",\n    r.requester,\n    r.level,\n    r.justification,\n    r.state AS \"state: AccessRequestState\",\n    r.decided_by,\n    r.note,\n    r.created_at,\n    r.decided_at\nFROM artifact.access_request AS r\nJOIN artifact.artifact AS a ON a.tenant = r.tenant AND a.artifact_id = r.artifact_id\nWHERE r.tenant = $1\n    AND r.requester = $2\n    AND ($3::text IS NULL OR r.state = $3)\n    AND a.state <> 'deleting'\nORDER BY r.access_request_id DESC\nLIMIT $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "access_request_id: AccessRequestId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "access_request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "requester",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "requester"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "justification",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "justification"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "state: AccessRequestState",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "decided_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "decided_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "decided_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.access_request",
+            "name": "decided_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "eea9dcf3c33680eedf2fcfa863bb04e38154b59138146a14e5d9f9328941c425"
+}

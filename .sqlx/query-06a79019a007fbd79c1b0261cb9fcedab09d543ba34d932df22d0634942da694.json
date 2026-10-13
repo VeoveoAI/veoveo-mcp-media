@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT audit.append_server_records($1, $2)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "append_server_records",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "JsonbArray",
+        "TimestamptzArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "06a79019a007fbd79c1b0261cb9fcedab09d543ba34d932df22d0634942da694"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Move the sealed position from the one the sealer read to the last record it sealed.\nUPDATE audit.sealer AS s\nSET txid = $1::bigint::text::xid8, sequence = $2\nWHERE s.txid = $3::bigint::text::xid8 AND s.sequence = $4\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "19ad842aea71db37d0589f88ab89d5cf1a8c1bde23b50a49bdfc6f6272130c45"
+}

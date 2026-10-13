@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A registered server declares its own usage kinds through its login.\nSELECT usage.declare_server_kinds($1::text[], $2::text[], $3::text[], $4::boolean[]) AS \"declared\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "declared",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "BoolArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2243a1c369e4e2815f0ba7f0aed7c21c86527b5ab66d266c4bfbb9c31c6abd22"
+}

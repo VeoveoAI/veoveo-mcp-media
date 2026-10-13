@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a share link names its artifact by its secret alone, and the secret's digest is unique across tenants)\n-- Count one redemption of a live link to a released, available artifact without labels,\n-- and return what the download URL names. The row lock and the limit in the WHERE clause\n-- let at most the link's limit of concurrent redemptions through.\nUPDATE artifact.share_link AS s\nSET redemptions = s.redemptions + 1\nFROM artifact.artifact AS a\nWHERE s.secret_digest = $1\n    AND s.revoked_at IS NULL\n    AND s.expires_at > $2\n    AND (s.redemption_limit IS NULL OR s.redemptions < s.redemption_limit)\n    AND a.tenant = s.tenant\n    AND a.artifact_id = s.artifact_id\n    AND a.release_state = 'released'\n    AND a.state = 'available'\n    AND cardinality(a.labels) = 0\n    AND (a.retain_until IS NULL OR a.retain_until > $2)\nRETURNING\n    s.tenant AS \"tenant: StoredTenant\",\n    s.share_link_id AS \"share_link_id: ShareLinkId\",\n    s.artifact_id AS \"artifact_id: ArtifactId\",\n    s.redemptions,\n    a.name,\n    a.media_type\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant: StoredTenant",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "tenant"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "share_link_id: ShareLinkId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "share_link_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "redemptions",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "redemptions"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "media_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b81ec933745c6eb7426b0500cfc3d7cdf5dd0f49c7c7b6792cbaac4a2c78f54a"
+}

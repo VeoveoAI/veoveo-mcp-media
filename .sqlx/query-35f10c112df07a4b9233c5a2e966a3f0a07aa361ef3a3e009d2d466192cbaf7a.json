@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Give an approved requester the level it asked for, unless a grant it already holds\n-- gives at least that level; such a grant stays as it is.\nINSERT INTO artifact.grant AS g (\n    tenant, artifact_id, subject_kind, subject, level, expires_at, granted_by, granted_at\n)\nVALUES ($1, $2, 'principal', $3, $4, NULL, $5, $6)\nON CONFLICT (tenant, artifact_id, subject_kind, subject) DO UPDATE\nSET level = excluded.level,\n    expires_at = NULL,\n    granted_by = excluded.granted_by,\n    granted_at = excluded.granted_at\nWHERE artifact.level_rank(g.level) < artifact.level_rank(excluded.level)\n    OR (artifact.level_rank(g.level) = artifact.level_rank(excluded.level)\n        AND g.expires_at IS NOT NULL)\nRETURNING g.subject\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.\"grant\"",
+            "name": "subject"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "35f10c112df07a4b9233c5a2e966a3f0a07aa361ef3a3e009d2d466192cbaf7a"
+}

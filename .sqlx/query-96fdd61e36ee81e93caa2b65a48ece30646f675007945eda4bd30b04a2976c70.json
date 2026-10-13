@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Remove a deleted artifact whose object is gone, with its grants, uploads, share links\n-- and access requests.\nDELETE FROM artifact.artifact\n-- `deleting_at` is set exactly while the artifact is deleting; testing it keeps the\n-- statement on the primary key rather than the sweep's partial index.\nWHERE tenant = $1 AND artifact_id = $2 AND deleting_at IS NOT NULL\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "96fdd61e36ee81e93caa2b65a48ece30646f675007945eda4bd30b04a2976c70"
+}

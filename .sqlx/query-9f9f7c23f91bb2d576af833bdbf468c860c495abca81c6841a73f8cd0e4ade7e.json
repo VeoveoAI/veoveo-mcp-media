@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the sealer seals the records of every partition in commit order)\n-- Whether a committed record follows the sealed position. The position is read once, so\n-- the comparison seeks record_commit_order past it.\nSELECT EXISTS (\n    SELECT\n    FROM audit.record AS r\n    WHERE (r.txid, r.sequence) > (SELECT s.txid, s.sequence FROM audit.sealer AS s)\n) AS \"pending!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pending!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9f9f7c23f91bb2d576af833bdbf468c860c495abca81c6841a73f8cd0e4ade7e"
+}

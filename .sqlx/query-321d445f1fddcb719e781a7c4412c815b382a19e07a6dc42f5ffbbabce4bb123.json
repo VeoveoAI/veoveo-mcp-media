@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (retention retires the oldest block of every partition)\n-- Each partition's oldest retained block, when it was sealed before the cutoff and every\n-- configured destination acknowledged it. Partition heads are read in key order; each\n-- seeks its oldest block through the block key and counts that block's acknowledged\n-- deliveries through the delivery key, so no other block or delivery is read.\nSELECT b.partition, b.sequence, b.head_hash, b.sealed_at, b.block\nFROM audit.partition_head AS h\nLEFT JOIN audit.retention_anchor AS a ON a.partition = h.partition\nCROSS JOIN LATERAL (\n    SELECT o.partition, o.sequence, o.head_hash, o.sealed_at, o.block\n    FROM audit.block AS o\n    WHERE o.partition = h.partition\n        AND o.sequence = coalesce(a.sequence, 0) + 1\n        AND o.sealed_at < $1\n        AND (\n            SELECT count(*)\n            FROM audit.export_delivery AS d\n            WHERE d.partition = o.partition\n                AND d.sequence = o.sequence\n                AND d.destination = ANY ($2::text[])\n                AND d.delivered_at IS NOT NULL\n        ) = (SELECT count(DISTINCT required) FROM unnest($2::text[]) AS required)\n    LIMIT 1\n) AS b\nORDER BY h.partition\nLIMIT 64\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "partition",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "partition"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "sequence",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "sequence"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "head_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "head_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "sealed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "sealed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "block",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "audit.block",
+            "name": "block"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "321d445f1fddcb719e781a7c4412c815b382a19e07a6dc42f5ffbbabce4bb123"
+}

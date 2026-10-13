@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- End an artifact's live share links when it returns to private. An artifact holds at\n-- most 256 live links, which creation counts under the artifact's lock.\nWITH live AS (\n    SELECT tenant, share_link_id\n    FROM artifact.share_link\n    WHERE tenant = $1 AND artifact_id = $2 AND revoked_at IS NULL AND expires_at > $3\n    LIMIT 256\n    FOR UPDATE\n)\nUPDATE artifact.share_link AS s\nSET revoked_at = $3\nFROM live\nWHERE s.tenant = live.tenant AND s.share_link_id = live.share_link_id\nRETURNING s.share_link_id AS \"share_link_id: ShareLinkId\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "share_link_id: ShareLinkId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "share_link_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d5e8ab2e71f851455e6252ad67b42c6244aaa3c667b0dab083c28b8c01cd69b4"
+}

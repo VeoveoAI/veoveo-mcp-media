@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The installation owner appends usage records in the caller's transaction.\nSELECT usage.append($1::jsonb[]) AS \"added!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "added!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "JsonbArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "aa3e5cbe0e5084076a6bbf201f66133db69d64cfc84f6597190c9b10006f9bf4"
+}

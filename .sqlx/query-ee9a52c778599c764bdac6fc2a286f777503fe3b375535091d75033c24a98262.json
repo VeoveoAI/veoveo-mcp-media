@@ -1,0 +1,175 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- One prediction by the provider's identity, when the viewer owns it and holds its labels.\n-- A prediction the viewer may not see reads as missing.\nSELECT\n    tenant AS \"tenant: StoredTenant\",\n    task_id,\n    owner AS \"owner: StoredPrincipal\",\n    data_labels,\n    model_id,\n    prediction_id,\n    status_url,\n    status,\n    error,\n    outputs AS \"outputs: Json<Vec<GeneratedArtifact>>\",\n    created_at,\n    updated_at,\n    completed_at\nFROM media.prediction\nWHERE tenant = $1 AND prediction_id = $2 AND owner = $3 AND data_labels <@ $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant: StoredTenant",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "tenant"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "task_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "task_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "owner: StoredPrincipal",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "owner"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "data_labels",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "data_labels"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "model_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "model_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "prediction_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "prediction_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "status_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "status_url"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "outputs: Json<Vec<GeneratedArtifact>>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "outputs"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "completed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "completed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ee9a52c778599c764bdac6fc2a286f777503fe3b375535091d75033c24a98262"
+}

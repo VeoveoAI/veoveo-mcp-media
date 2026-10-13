@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the sweep prunes every tenant's ended runs in batches)\n-- Delete one batch of runs that ended before the cutoff.\nWITH due AS (\n    SELECT tenant, task_id\n    FROM media.prediction\n    WHERE completed_at < $1 AND completed_at IS NOT NULL\n    ORDER BY completed_at\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n)\nDELETE FROM media.prediction AS p\nUSING due\nWHERE p.tenant = due.tenant AND p.task_id = due.task_id\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bff2d50711a775e945ff52a06eb45d2c3ac1d0ad5afc03a2478f21f780afb23a"
+}

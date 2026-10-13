@@ -1,0 +1,214 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A new artifact waiting for its bytes. Its creator owns it, so the creator administers it.\nINSERT INTO artifact.artifact AS a (\n    tenant, artifact_id, owner, owner_key, work_context, name, media_type, labels,\n    release_state, state, provenance, metadata, retention_days, created_at\n)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'private', 'uploading', $9, $10, $11, $12)\nRETURNING\n    a.artifact_id AS \"artifact_id: ArtifactId\",\n    a.owner_key,\n    a.work_context,\n    a.name,\n    a.media_type,\n    a.size_bytes,\n    a.sha256,\n    a.labels,\n    a.release_state AS \"release_state: ReleaseState\",\n    a.state AS \"state: ArtifactState\",\n    a.provenance AS \"provenance: Json<ArtifactProvenance>\",\n    a.metadata AS \"metadata: Json<ArtifactMetadataMap>\",\n    a.created_at,\n    a.available_at,\n    a.retain_until,\n    3::smallint AS \"level!: i16\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "owner_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "owner_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "work_context",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "work_context"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "sha256",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "labels",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "labels"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "release_state: ReleaseState",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "release_state"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "state: ArtifactState",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "provenance: Json<ArtifactProvenance>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "provenance"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "metadata: Json<ArtifactMetadataMap>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "metadata"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "available_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "available_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "retain_until",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "retain_until"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "level!: i16",
+        "type_info": "Int2",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Jsonb",
+        "Jsonb",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "b1fbb28a7030e44a0957e9bc112e58d06d36c8f97ac59e17cdf3a15a6621350e"
+}

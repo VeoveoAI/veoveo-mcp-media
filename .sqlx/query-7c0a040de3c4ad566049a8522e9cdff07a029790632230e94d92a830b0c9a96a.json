@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- How many of the listed artifacts the caller may read.\n-- Parameters $1 to $9 are the caller's facts for artifact.effective_level: tenant,\n-- principal, principal key, groups, their roles, Work Context, membership, labels and time.\nSELECT count(*) AS \"visible!\"\nFROM artifact.artifact AS a\nWHERE a.tenant = $1\n    AND a.artifact_id = ANY($10::uuid[])\n    AND artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) >= 1\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "visible!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "Text",
+        "Text",
+        "TextArray",
+        "Timestamptz",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7c0a040de3c4ad566049a8522e9cdff07a029790632230e94d92a830b0c9a96a"
+}

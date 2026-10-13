@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the sweep ends every tenant's expired uploads in batches)\n-- End one batch of open uploads past their expiry, oldest first, and fail their\n-- artifacts. Replicas sweeping at once take different rows. The caller aborts each\n-- returned multipart upload in object storage.\nWITH due AS (\n    SELECT tenant, upload_id\n    FROM artifact.upload\n    WHERE state = 'open' AND expires_at <= $1\n    ORDER BY expires_at\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n),\nended AS (\n    UPDATE artifact.upload AS u\n    SET state = 'expired', ended_at = $1\n    FROM due\n    WHERE u.tenant = due.tenant AND u.upload_id = due.upload_id\n    RETURNING u.tenant, u.upload_id, u.artifact_id, u.object_upload\n),\nfailed AS (\n    UPDATE artifact.artifact AS a\n    SET state = 'failed', failed_at = $1\n    FROM ended\n    WHERE a.tenant = ended.tenant\n        AND a.artifact_id = ended.artifact_id\n        AND a.state = 'uploading'\n    RETURNING a.artifact_id\n)\nSELECT\n    ended.tenant AS \"tenant!: StoredTenant\",\n    ended.upload_id AS \"upload_id!: UploadId\",\n    ended.artifact_id AS \"artifact_id!: ArtifactId\",\n    ended.object_upload\nFROM ended\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant!: StoredTenant",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "tenant"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "upload_id!: UploadId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "upload_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "artifact_id!: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "object_upload",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.upload",
+            "name": "object_upload"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9839100a86b16d8be454066805c7a20e1ca6abfa2787894b403f1bb6a7616645"
+}

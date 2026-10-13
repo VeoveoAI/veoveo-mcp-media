@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- A registered server appends its own usage records in the caller's transaction.\nSELECT usage.append_server_records($1::jsonb[]) AS \"added!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "added!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "JsonbArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e0b5d2c964c2a9a6c317bed7b9daccc993d3a56ab06b93c5f443c65137cd813c"
+}
