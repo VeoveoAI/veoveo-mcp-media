@@ -152,9 +152,11 @@ openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
 through the full flow: the live catalog, the submission, completion, the output stored
 in Artifact in process, the reconciled bill and the Task's cost. It is ignored by
 default, is never part of the gate, and runs only with `MEDIA_PROVIDER_QUALIFICATION=1`.
-It runs the cheapest priced text-to-image model in the live catalog unless
-`MEDIA_QUALIFICATION_MODEL` names another, with a short prompt unless
-`MEDIA_QUALIFICATION_INPUT` holds the model's input as JSON.
+It quotes the input on the 20 text-to-image models with the lowest base prices and runs
+the one with the lowest quote, unless `MEDIA_QUALIFICATION_MODEL` names another, with a
+short prompt unless `MEDIA_QUALIFICATION_INPUT` holds the model's input as JSON. A base
+price leaves out what the input's defaults add, so only a quote ranks the models. The
+test checks that the quote, the run's estimate, covers the bill.
 
 Inside the Media environment, the API key reaches the test as an OpenShell placeholder
 that resolves only on requests to the provider. Create a provider whose credential is

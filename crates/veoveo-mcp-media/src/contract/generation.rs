@@ -64,6 +64,8 @@ pub enum RunFailureCode {
     UnknownModel,
     /// The model's schema refuses the input.
     InvalidInput,
+    /// The provider could not quote the run's price, so the run never reached it.
+    PriceUnavailable,
     /// The provider refused the submission.
     ProviderRefused,
     /// The provider named a prediction that another run already holds.

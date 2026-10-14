@@ -377,10 +377,9 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
     // reserve its estimated cost. A run resumed after its dispatch skips all three.
     let dispatched = ctx.runtime().operation(task_id, &generation.key).await?;
     if dispatched.is_none() {
-        let price = match admit(media, &request) {
-            Ok(price) => price,
-            Err(failure) => return fail(media, &owner, task_id, None, failure).await,
-        };
+        if let Err(failure) = admit(media, &request) {
+            return fail(media, &owner, task_id, None, failure).await;
+        }
         match ctx.checkpoint().await {
             Ok(()) => {}
             Err(TaskStop::Cancelled) => {
@@ -396,13 +395,36 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
             }
             Err(stop) => return Err(stop.into()),
         }
-        if let Some(price) = price {
-            ctx.usage()?
-                .estimate(MediaUsage::Generation, Quantity::whole(1))
-                .money(usd(price)?)
-                .operation(&generation.key)
-                .await?;
-        }
+        // The provider's quote for this input is the estimate. It is a durable step, so
+        // a run resumed before its dispatch records the same estimate again, which the
+        // usage ledger takes as a repeat.
+        let (provider, model, input) = (&media.provider, &request.model, &request.input);
+        let quote = ctx
+            .step(&quote_key(), |_| async move {
+                provider
+                    .quote(model, input)
+                    .await
+                    .map_err(|error| anyhow::Error::from(Unpriced(error)))
+            })
+            .await;
+        let price: f64 = match quote {
+            Ok(price) => price,
+            Err(error) => match error.downcast::<Unpriced>() {
+                Ok(Unpriced(error)) => {
+                    let failure = RunFailure::new(
+                        RunFailureCode::PriceUnavailable,
+                        format!("the provider could not quote the run's price: {error}"),
+                    );
+                    return fail(media, &owner, task_id, None, failure).await;
+                }
+                Err(error) => return Err(error),
+            },
+        };
+        ctx.usage()?
+            .estimate(MediaUsage::Generation, Quantity::whole(1))
+            .money(usd(price)?)
+            .operation(&generation.key)
+            .await?;
     }
     // Hand the run to the provider once. A submission whose outcome is unknown waits
     // for the provider's report instead of submitting again. A run under events
@@ -582,6 +604,16 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
     Ok(mcp_task_completion(GENERATION_COMPLETED, completion)?)
 }
 
+/// The durable step that holds the provider's quote for the run.
+fn quote_key() -> StepKey {
+    StepKey::parse("quote").expect("a valid step key")
+}
+
+/// A provider's failure to quote a run's price, before the run reached it.
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+struct Unpriced(ProviderError);
+
 /// A provider refusal of a submission: the run reached the provider, which declined it.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
@@ -599,14 +631,14 @@ fn keeps_the_task(error: &anyhow::Error) -> bool {
         || TaskWorkError::is_lost(error)
 }
 
-/// The model's list price, once the input satisfies the model's schema.
-fn admit(media: &MediaWork, request: &RunRequest) -> Result<Option<f64>, RunFailure> {
+/// Admit the run: the catalog holds the model, and the input satisfies its schema.
+fn admit(media: &MediaWork, request: &RunRequest) -> Result<(), RunFailure> {
     let snapshot = media
         .catalog
         .snapshot()
         .map_err(|error| RunFailure::new(RunFailureCode::CatalogUnavailable, error.to_string()))?;
     match snapshot.admit_input(&request.model, &request.input) {
-        Ok(model) => Ok(model.base_price),
+        Ok(_) => Ok(()),
         Err(InputError::Catalog(error)) => Err(RunFailure::new(
             RunFailureCode::UnknownModel,
             error.to_string(),

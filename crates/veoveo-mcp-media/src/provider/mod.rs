@@ -6,8 +6,8 @@ pub mod webhook;
 pub mod wire;
 
 pub use client::{
-    BILLING_TIMEOUT, CANCEL_TIMEOUT, ProviderClient, ProviderError, REGISTRY_TIMEOUT,
-    STATUS_TIMEOUT, SUBMIT_TIMEOUT,
+    BILLING_TIMEOUT, CANCEL_TIMEOUT, ProviderClient, ProviderError, QUOTE_TIMEOUT,
+    REGISTRY_TIMEOUT, STATUS_TIMEOUT, SUBMIT_TIMEOUT,
 };
 pub use events::{
     BillingOutcome, ProviderWebhooks, WEBHOOK_TOLERANCE_SECS, billing_key, billing_provider,

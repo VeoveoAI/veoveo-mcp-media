@@ -138,6 +138,30 @@ impl ModelEntry {
     }
 }
 
+/// The body of a price quote: the model and the run's input, which the provider's
+/// pricing formula reads.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriceRequest {
+    pub model_id: MediaModelId,
+    pub inputs: serde_json::Map<String, Value>,
+}
+
+/// The provider's quote for one run: its price in `currency` before any discount, and
+/// the discounted price the provider names beside it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PriceQuote {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<MediaModelId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discounted_price: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discount_rate: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
+}
+
 /// A page of billing records the provider found.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BillingSearch {

@@ -17,7 +17,7 @@
 //! | `MEDIA_PROVIDER_URL` | The provider's API origin |
 //! | `MEDIA_PROVIDER_API_KEY` | The provider's API key; never printed |
 //! | `MEDIA_OUTPUT_HOSTS` | The hosts the provider serves outputs from, comma-separated |
-//! | `MEDIA_QUALIFICATION_MODEL` | The model to run; by default the cheapest priced text-to-image model in the live catalog |
+//! | `MEDIA_QUALIFICATION_MODEL` | The model to run; by default the text-to-image model with the lowest quote for the input among the 20 with the lowest base prices |
 //! | `MEDIA_QUALIFICATION_INPUT` | The model's input as a JSON object; by default a short prompt |
 //! | `MEDIA_QUALIFICATION_PUBLIC_ORIGIN` | A public origin that reaches this test, such as a temporary tunnel; it stands in for the installation's public origin, selects webhook completion and receives `{origin}/media/operations/…`. Without it the run checks the provider's status endpoint |
 //! | `MEDIA_QUALIFICATION_CALLBACK_LISTEN` | Where this test listens for the forwarded webhooks, `127.0.0.1:8899` by default |
@@ -41,6 +41,43 @@ use veoveo_mcp_media::{
     run::{RunCompletion, RunSettings},
 };
 use veoveo_task_runtime::CheckSchedule;
+
+/// How many of the lowest base prices the qualification quotes for its input.
+const QUOTED_CANDIDATES: usize = 20;
+
+/// The text-to-image model whose quote for `input` is lowest, among the
+/// [`QUOTED_CANDIDATES`] whose base prices are lowest and that admit the input. A base
+/// price leaves out what the input's defaults add, so only a quote ranks the models.
+async fn cheapest(
+    harness: &support::Harness,
+    snapshot: &veoveo_mcp_media::catalog::Snapshot,
+    input: &Map<String, Value>,
+) -> MediaModelId {
+    let mut candidates: Vec<_> = snapshot
+        .models()
+        .filter(|model| model.model_type.eq_ignore_ascii_case("text-to-image"))
+        .filter_map(|model| {
+            model
+                .base_price
+                .filter(|price| *price > 0.0)
+                .map(|price| (price, model.model_id.clone()))
+        })
+        .filter(|(_, model)| snapshot.admit_input(model, input).is_ok())
+        .collect();
+    candidates.sort_by(|(a, _), (b, _)| a.total_cmp(b));
+    let mut cheapest: Option<(f64, MediaModelId)> = None;
+    for (_, model) in candidates.into_iter().take(QUOTED_CANDIDATES) {
+        let Ok(quote) = harness.provider().quote(&model, input).await else {
+            continue;
+        };
+        if quote > 0.0 && cheapest.as_ref().is_none_or(|(best, _)| quote < *best) {
+            cheapest = Some((quote, model));
+        }
+    }
+    cheapest
+        .map(|(_, model)| model)
+        .expect("a quoted text-to-image model in the live catalog")
+}
 
 fn required(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| panic!("the qualification needs {name}"))
@@ -156,24 +193,9 @@ async fn one_real_generation_runs_through_the_full_flow() {
         forward_webhooks(listen, harness.mesh.base()).await;
     }
 
-    // The live catalog, and the model to run.
+    // The live catalog, the input and the model to run.
     let snapshot = harness.catalog.snapshot().expect("the live catalog loaded");
     assert!(!snapshot.is_empty(), "the provider lists models");
-    let model = match std::env::var("MEDIA_QUALIFICATION_MODEL") {
-        Ok(model) => MediaModelId::parse(model).expect("MEDIA_QUALIFICATION_MODEL"),
-        Err(_) => snapshot
-            .models()
-            .filter(|model| model.model_type.eq_ignore_ascii_case("text-to-image"))
-            .filter_map(|model| {
-                model
-                    .base_price
-                    .filter(|price| *price > 0.0)
-                    .map(|price| (price, model))
-            })
-            .min_by(|(a, _), (b, _)| a.total_cmp(b))
-            .map(|(_, model)| model.model_id.clone())
-            .expect("a priced text-to-image model in the live catalog"),
-    };
     let input: Map<String, Value> = match std::env::var("MEDIA_QUALIFICATION_INPUT") {
         Ok(input) => {
             serde_json::from_str(&input).expect("MEDIA_QUALIFICATION_INPUT is a JSON object")
@@ -183,11 +205,19 @@ async fn one_real_generation_runs_through_the_full_flow() {
             .cloned()
             .unwrap(),
     };
+    let model = match std::env::var("MEDIA_QUALIFICATION_MODEL") {
+        Ok(model) => MediaModelId::parse(model).expect("MEDIA_QUALIFICATION_MODEL"),
+        Err(_) => cheapest(&harness, &snapshot, &input).await,
+    };
     if let Err(error) = snapshot.admit_input(&model, &input) {
         panic!("{model} refuses the qualification input; set MEDIA_QUALIFICATION_INPUT: {error}");
     }
-    let price = snapshot.model(&model).and_then(|entry| entry.base_price);
-    eprintln!("qualifying {model} at a list price of {price:?} USD");
+    let quote = harness
+        .provider()
+        .quote(&model, &input)
+        .await
+        .expect("the provider quotes the run");
+    eprintln!("qualifying {model} at a quoted price of {quote} USD");
 
     // One run through the full flow.
     let started = harness
@@ -231,8 +261,17 @@ async fn one_real_generation_runs_through_the_full_flow() {
         usage[0]["phase"], "actual",
         "the provider's bill was reconciled"
     );
+    // The estimate, the provider's quote, covers the bill.
+    let actual: f64 = usage[0]["money"]["amount"]
+        .as_str()
+        .and_then(|amount| amount.parse().ok())
+        .expect("the actual cost's amount");
+    assert!(
+        actual <= quote + 1e-9,
+        "the bill of {actual} USD exceeds the quote of {quote} USD"
+    );
     eprintln!(
-        "prediction {} stored {} output(s); the run cost {} {}",
+        "prediction {} stored {} output(s); quoted {quote} USD, the run cost {} {}",
         result["prediction"]["predictionId"],
         artifacts.len(),
         usage[0]["money"]["amount"],

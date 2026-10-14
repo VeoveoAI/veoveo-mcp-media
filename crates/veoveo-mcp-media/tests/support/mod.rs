@@ -409,6 +409,11 @@ impl Harness {
         self.fake = Some(fake.restarted().await.unwrap());
     }
 
+    /// The provider client Media's runs call.
+    pub fn provider(&self) -> &ProviderClient {
+        &self.work.provider
+    }
+
     /// The fake provider of a harness that runs one.
     pub fn fake(&self) -> &FakeProvider {
         self.fake

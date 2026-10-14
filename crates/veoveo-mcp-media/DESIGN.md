@@ -36,13 +36,13 @@ port         8802
 | [FOCUS 1.4](https://focus.finops.org/focus-specification/) usage records in core's [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/platform/usage/DESIGN.md) | One usage kind, `media.generation`, in the FOCUS service category "AI and Machine Learning" with the unit `Requests`, and amounts in [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) US dollars. |
 | [Veoveo server registration](https://github.com/VeoveoAI/veoveo-sdk-rust) | Media registers through RFC 7591, removes its registration through RFC 7592, and declares its permissions and its uses of Artifact in `ai.veoveo/authorization`. |
 | [PostgreSQL 18](https://www.postgresql.org/docs/18/) | Server 18.6 through sqlx 0.9.0, under the [installation database design](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/docs/DATABASE.md) of `veoveo-core`. Media owns the schema `media`, applies its own migrations and runs every statement from a `.sql` file that sqlx checks. Row triggers publish changes on the `media` channel. |
-| The provider's HTTP API | The subset Media calls: the model registry, a submission with an optional webhook, a prediction's status endpoint, a billing search and a prediction's deletion. Every response is wrapped in `{code, message, data}`. |
+| The provider's HTTP API | The subset Media calls: the model registry, a price quote for a model and an input, a submission with an optional webhook, a prediction's status endpoint, a billing search and a prediction's deletion. Every response is wrapped in `{code, message, data}`. |
 
 ## Domain Contract
 
 Media answers these questions for a caller:
 
-- Which models can generate what, at what list price, and what input does each take?
+- Which models can generate what, from what base price, and what input does each take?
 - What did my runs produce, where are the outputs, and what did each run cost?
 
 A run's input belongs to the model and passes through to the provider. Everything else
@@ -108,8 +108,9 @@ has not finished:
 
 1. Record the run for the caller's listing.
 2. Before the run reaches the provider: check the input against the model's schema,
-   stop if the Task was cancelled, and record the estimated cost, the model's list
-   price, as a reservation in the usage ledger.
+   stop if the Task was cancelled, ask the provider to quote the run's price for this
+   input, and record the quote as the estimated cost, a reservation in the usage
+   ledger. A run the provider cannot price fails without reaching it.
 3. Dispatch the generation as a core operation. The runtime records the operation
    before the provider is called. A submission whose outcome is unknown, or a restarted
    dispatch that may have reached the provider, waits for the provider's report and
@@ -151,7 +152,13 @@ and waits for Artifact to verify the bytes. A result links each output by its ad
 
 ### Costs
 
-The estimate is recorded before the dispatch. After the outcome, a second operation
+The estimate is the provider's quote for the model and the run's input, recorded
+before the dispatch. A model's base price in the catalog leaves out what the input and
+its defaults add, and a quote evaluates the provider's pricing formula over both, so a
+run's estimate can exceed its model's base price several times. Media reserves the
+quote's undiscounted price: the provider does not document its discount fields, and a
+reservation may exceed the bill. The quote is a durable step, so a run resumed before
+its dispatch records the same estimate. After the outcome, a second operation
 checks the provider's billing records for the prediction on a bounded schedule, and
 their net amount becomes the run's actual cost. A bill that does not appear before the
 billing deadline leaves the estimate as the run's cost. Every Task view carries its
@@ -166,6 +173,7 @@ A failed run's Task records one of these codes beside a message that names no se
 | `catalog_unavailable` | The catalog could not be read when the run started |
 | `unknown_model` | The catalog holds no such model |
 | `invalid_input` | The model's schema refuses the input |
+| `price_unavailable` | The provider could not quote the run's price, so the run never reached it |
 | `provider_refused` | The provider refused the submission |
 | `prediction_conflict` | The provider named a prediction that another run already holds |
 | `generation_failed` | The provider failed, timed out, cancelled or deleted the prediction |
@@ -191,14 +199,15 @@ The provider's identity stays in `src/provider/`. Its address is required
 configuration with no default, so every installation and test names the provider it
 calls; tests and the local installation run the fake provider from the `testing`
 feature. Every call carries a timeout: 60 seconds for the registry, 30 for a
-submission, 15 for a status read and a billing search, and 10 for a deletion. No error
+submission, 15 for a quote, a status read and a billing search, and 10 for a deletion. No error
 names a URL, because a submission's URL carries the callback's token.
 
 ## Catalog
 
 The catalog is an immutable snapshot of the provider's registry, read at startup and
 every hour, and replaced whole when a refresh reads a valid registry: unique models and
-finite prices. A failed refresh keeps the current snapshot. Catalog cursors are bound
+finite prices. A model's base price is what a run costs before its input enters the
+provider's pricing formula; a run's own price comes from a quote. A failed refresh keeps the current snapshot. Catalog cursors are bound
 to the snapshot's SHA-256, the filters and the limit, so a cursor never pages another
 registry. Probes never call the provider.
 
@@ -265,7 +274,7 @@ signs the client assertions of its token exchanges.
 |---|---|
 | Unit tests | Identities, resource routes, permissions, webhook signatures, the provider client's address, status-endpoint and redaction rules, the catalog's pages, cursors and input checks, the requirement table and tool annotations, prompts and configuration |
 | `tests/store.rs` | The `media` schema on PostgreSQL: run progress and its first ending, reads by owner and labels, keyset pages and their cursors, and the sweep |
-| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity; a run whose row the database refuses to update, which reads as its Task ended and which the sweep settles |
+| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity; a run whose row the database refuses to update, which reads as its Task ended and which the sweep settles; an estimate from the provider's quote above the base price; a run the provider cannot price |
 | `tests/database_conformance.rs` | Core's database rules over every statement and the schema |
 | `tests/acceptance.rs` | Ignored by default: a run through the Gateway of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run |
-| `tests/provider_qualification.rs` | Ignored by default and gated by `MEDIA_PROVIDER_QUALIFICATION=1`: one billed generation with the real provider through the full flow |
+| `tests/provider_qualification.rs` | Ignored by default and gated by `MEDIA_PROVIDER_QUALIFICATION=1`: one billed generation with the real provider through the full flow, on the model with the lowest quote for its input, whose bill the quote covers |

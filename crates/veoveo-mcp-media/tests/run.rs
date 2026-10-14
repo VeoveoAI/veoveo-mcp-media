@@ -164,6 +164,9 @@ async fn a_signed_webhook_settles_once_and_forgeries_and_repeats_change_nothing(
         let estimate = usage_of(&parked);
         assert_eq!(estimate.len(), 1, "{parked}");
         assert_eq!(estimate[0]["phase"], "estimate");
+        // The estimate is the provider's quote for this input, above the model's base
+        // price.
+        assert_eq!(estimate[0]["money"]["amount"], "0.04");
         assert_eq!(
             status_of(&harness, &task).await,
             PredictionStatus::Processing
@@ -745,6 +748,26 @@ async fn a_run_whose_row_cannot_be_written_fails_and_reads_as_its_task_ended() {
         assert_eq!(row.status, "failed");
         assert_eq!(row.error.as_deref(), Some(failure.message.as_str()));
         assert_eq!(row.completed_at, stored.completed_at);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_run_the_provider_cannot_price_fails_before_it_reaches_the_provider() {
+    within(async {
+        let harness = harness(true).await;
+        harness.fake().refuse_quotes(true);
+        let task = harness.run(IMAGE_MODEL, prompt()).await;
+        let failed = harness
+            .until(&task, |view| view["status"] == "failed")
+            .await;
+        let stored = harness
+            .stored_until(&task, |snapshot| snapshot.status == TaskStatus::Failed)
+            .await;
+        assert_eq!(stored.error.unwrap().code, "price_unavailable");
+        assert!(usage_of(&failed).is_empty(), "{failed}");
+        assert_eq!(status_of(&harness, &task).await, PredictionStatus::Failed);
+        assert_eq!(harness.fake().submissions(), 0);
     })
     .await;
 }

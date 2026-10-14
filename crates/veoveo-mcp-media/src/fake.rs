@@ -3,8 +3,9 @@
 //! registry, accepts submissions, finishes each after a delay and posts the outcome to the
 //! submission's webhook signed with the webhook secret, or keeps it at the prediction's
 //! status endpoint when the submission named no webhook. It serves the outputs, answers
-//! billing searches and deletes predictions on cancellation. Tests can hold outcomes back,
-//! send events by hand, redirect the outputs elsewhere and restart the fake.
+//! billing searches and price quotes and deletes predictions on cancellation. Tests can
+//! hold outcomes back, send events by hand, redirect the outputs elsewhere, refuse quotes
+//! and restart the fake.
 //!
 //! Predictions and events carry identities shaped like the provider's, 32 hexadecimal
 //! digits, fresh in every process: a prediction's first event takes the prediction's
@@ -56,8 +57,12 @@ pub const IMAGE_MODEL: &str = "fake/text-to-image";
 pub const LARGE_MODEL: &str = "fake/large-video";
 /// The fake's failing model: every run fails at the provider.
 pub const FAILING_MODEL: &str = "fake/always-fails";
-/// What one run of any fake model costs, in US dollars.
+/// What one run of any fake model costs, in US dollars: the quote for any input, and the
+/// bill.
 pub const PRICE_USD: f64 = 0.04;
+/// Every fake model's base price in its registry entry, below what a run costs, as a
+/// provider's base price is when the input's defaults raise it.
+pub const BASE_PRICE_USD: f64 = 0.01;
 /// The bytes of an image model's output.
 pub const IMAGE_BYTES: u64 = 64 * 1024;
 /// The bytes of the large model's output.
@@ -86,7 +91,7 @@ pub fn registry() -> Vec<ModelEntry> {
         name: id.rsplit('/').next().unwrap_or(id).to_owned(),
         model_type: model_type.to_owned(),
         description: description.to_owned(),
-        base_price: Some(PRICE_USD),
+        base_price: Some(BASE_PRICE_USD),
         formula: Some("per run".to_owned()),
         api_schema: Some(api_schema),
     };
@@ -132,6 +137,7 @@ struct FakeState {
     base: Url,
     secret: String,
     deliver: AtomicBool,
+    refuse_quotes: AtomicBool,
     delay: Duration,
     /// The identity the next submission takes instead of a fresh one.
     next_prediction: Mutex<Option<String>>,
@@ -180,6 +186,7 @@ impl FakeProvider {
             base,
             secret: config.webhook_secret.clone(),
             deliver: AtomicBool::new(config.deliver),
+            refuse_quotes: AtomicBool::new(false),
             delay: config.delay,
             next_prediction: Mutex::new(None),
             submissions: AtomicU64::new(0),
@@ -192,6 +199,7 @@ impl FakeProvider {
         let router = Router::new()
             .route("/api/v3/models", get(models))
             .route("/api/v3/billings/search", post(billing))
+            .route("/api/v3/model/price", post(price))
             .route("/api/v3/predictions/delete", post(cancel))
             .route("/api/v3/predictions/{prediction}/result", get(status))
             .route("/api/v3/{*model}", post(submit))
@@ -255,6 +263,11 @@ impl FakeProvider {
     /// outputs again with `None`.
     pub fn redirect_outputs(&self, target: Option<Url>) {
         *self.state.redirect.lock().expect("fake redirect lock") = target;
+    }
+
+    /// Whether price quotes fail from now on, as an unavailable pricing service's do.
+    pub fn refuse_quotes(&self, refuse: bool) {
+        self.state.refuse_quotes.store(refuse, Ordering::SeqCst);
     }
 
     /// Whether outcomes are posted on their own from now on.
@@ -504,6 +517,38 @@ async fn billing(
         })
         .collect();
     Json(Envelope::ok(BillingSearch { items }))
+}
+
+/// A price quote: the run's price for a registry model and any input, or its base price
+/// when the request names no input.
+async fn price(
+    State(state): State<Arc<FakeState>>,
+    Json(request): Json<Value>,
+) -> Json<Envelope<Value>> {
+    let model = request
+        .get("model_id")
+        .and_then(Value::as_str)
+        .and_then(|model| MediaModelId::parse(model).ok())
+        .filter(|model| registry().iter().any(|entry| entry.model_id == *model));
+    let Some(model) = model.filter(|_| !state.refuse_quotes.load(Ordering::SeqCst)) else {
+        return Json(Envelope {
+            code: 500,
+            message: "no price".into(),
+            data: Value::Null,
+        });
+    };
+    let price = if request.get("inputs").is_some() {
+        PRICE_USD
+    } else {
+        BASE_PRICE_USD
+    };
+    Json(Envelope::ok(json!({
+        "model_id": model,
+        "price": price,
+        "discounted_price": price,
+        "discount_rate": 100,
+        "currency": "USD"
+    })))
 }
 
 async fn cancel(

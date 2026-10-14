@@ -1,5 +1,5 @@
-//! The generation provider's HTTP API: its model registry, submissions, billing records
-//! and cancellations. Every call carries a timeout, and no error names a URL, because a
+//! The generation provider's HTTP API: its model registry, price quotes, submissions,
+//! billing records and cancellations. Every call carries a timeout, and no error names a URL, because a
 //! submission's URL carries the callback's bearer token.
 use std::time::Duration;
 
@@ -10,12 +10,14 @@ use serde_json::{Map, Value};
 
 use super::wire::{
     BillingQuery, BillingRecord, BillingSearch, CancellationReceipt, CancellationRequest, Envelope,
-    ModelEntry, Prediction,
+    ModelEntry, Prediction, PriceQuote, PriceRequest,
 };
 use crate::contract::{MediaModelId, MediaPredictionId};
 
 /// How long reading the model registry may take.
 pub const REGISTRY_TIMEOUT: Duration = Duration::from_secs(60);
+/// How long a price quote may take.
+pub const QUOTE_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long a submission may take to be accepted.
 pub const SUBMIT_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long a billing search may take.
@@ -145,6 +147,42 @@ impl ProviderClient {
                 .await,
         )
         .await
+    }
+
+    /// The provider's price in US dollars of one run of `model` with `input`, before any
+    /// discount. The provider evaluates the model's pricing formula over the input and
+    /// its defaults, so the price can exceed the model's base price.
+    pub async fn quote(
+        &self,
+        model: &MediaModelId,
+        input: &Map<String, Value>,
+    ) -> Result<f64, ProviderError> {
+        let quote: PriceQuote = Self::answer(
+            self.http
+                .post(self.endpoint(["model", "price"]))
+                .bearer_auth(self.api_key.expose_secret())
+                .json(&PriceRequest {
+                    model_id: model.clone(),
+                    inputs: input.clone(),
+                })
+                .timeout(QUOTE_TIMEOUT)
+                .send()
+                .await,
+        )
+        .await?;
+        if quote
+            .currency
+            .as_deref()
+            .is_some_and(|currency| !currency.eq_ignore_ascii_case("USD"))
+        {
+            return Err(ProviderError::Decode(
+                "the quote is in a currency other than US dollars".into(),
+            ));
+        }
+        quote
+            .price
+            .filter(|price| price.is_finite() && *price >= 0.0)
+            .ok_or_else(|| ProviderError::Decode("the quote names no price".into()))
     }
 
     /// Submit a run of `model`. The provider posts the prediction's outcome to `webhook`,
@@ -281,6 +319,10 @@ mod tests {
         assert_eq!(
             client.endpoint(["billings", "search"]).as_str(),
             "http://127.0.0.1:8803/base/api/v3/billings/search"
+        );
+        assert_eq!(
+            client.endpoint(["model", "price"]).as_str(),
+            "http://127.0.0.1:8803/base/api/v3/model/price"
         );
     }
 

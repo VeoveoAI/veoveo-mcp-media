@@ -41,7 +41,9 @@ pub struct ModelCatalogItem {
     #[serde(rename = "type")]
     pub model_type: String,
     pub description: String,
-    /// The provider's list price of one run in US dollars, when it publishes one.
+    /// The provider's base price of one run in US dollars, when it publishes one: what a
+    /// run costs before its input enters the provider's pricing formula. A run's input
+    /// and its defaults can raise its price above this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_price: Option<f64>,
     /// The model's address, `media://model/{+model_id}`, which holds its input schema.
@@ -73,6 +75,8 @@ pub struct ModelSchema {
     #[serde(rename = "type")]
     pub model_type: String,
     pub description: String,
+    /// The provider's base price of one run in US dollars, before the run's input enters
+    /// the provider's pricing formula.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_price: Option<f64>,
     /// How the provider prices a run, as it publishes it.
