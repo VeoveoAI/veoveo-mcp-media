@@ -3,8 +3,8 @@
 //! registry, accepts submissions, finishes each after a delay and posts the outcome to the
 //! submission's webhook signed with the webhook secret, or keeps it at the prediction's
 //! status endpoint when the submission named no webhook. It serves the outputs, answers
-//! billing searches and deletes predictions on cancellation. Tests can hold outcomes back
-//! and send events by hand.
+//! billing searches and deletes predictions on cancellation. Tests can hold outcomes back,
+//! send events by hand and redirect the outputs elsewhere.
 use std::{
     collections::BTreeMap,
     net::SocketAddr,
@@ -122,6 +122,7 @@ struct FakeState {
     cancellations: AtomicU64,
     status_reads: AtomicU64,
     predictions: Mutex<BTreeMap<String, Held>>,
+    redirect: Mutex<Option<Url>>,
     http: reqwest::Client,
 }
 
@@ -161,6 +162,7 @@ impl FakeProvider {
             cancellations: AtomicU64::new(0),
             status_reads: AtomicU64::new(0),
             predictions: Mutex::new(BTreeMap::new()),
+            redirect: Mutex::new(None),
             http: reqwest::Client::new(),
         });
         let router = Router::new()
@@ -190,6 +192,12 @@ impl FakeProvider {
     /// How many cancellations the fake received.
     pub fn cancellations(&self) -> u64 {
         self.state.cancellations.load(Ordering::SeqCst)
+    }
+
+    /// Answer every output request with a redirect to `target` from now on, or serve the
+    /// outputs again with `None`.
+    pub fn redirect_outputs(&self, target: Option<Url>) {
+        *self.state.redirect.lock().expect("fake redirect lock") = target;
     }
 
     /// Whether outcomes are posted on their own from now on.
@@ -473,6 +481,9 @@ async fn output(
         }
         entry.prediction.model.clone()
     };
+    if let Some(target) = state.redirect.lock().expect("fake redirect lock").clone() {
+        return (StatusCode::FOUND, [(header::LOCATION, target.to_string())]).into_response();
+    }
     let (length, media_type) = if model.as_str() == LARGE_MODEL {
         (LARGE_BYTES, "video/mp4")
     } else {

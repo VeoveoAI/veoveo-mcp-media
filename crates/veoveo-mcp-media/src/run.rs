@@ -145,6 +145,35 @@ impl Default for RunSettings {
     }
 }
 
+/// How many redirects one output fetch follows.
+const OUTPUT_REDIRECTS: usize = 3;
+
+/// The hosts outputs may be fetched from: the configured ones, or else the provider's.
+#[derive(Debug, Clone)]
+struct OutputHosts {
+    configured: BTreeSet<String>,
+    provider: Option<(String, String)>,
+}
+
+impl OutputHosts {
+    /// Whether `url` is an HTTP or HTTPS URL on an allowed host.
+    fn admit(&self, url: &Url) -> bool {
+        let Some((host, with_port)) = authority(url) else {
+            return false;
+        };
+        let allowed = if self.configured.is_empty() {
+            self.provider
+                .as_ref()
+                .is_some_and(|(provider, provider_with_port)| {
+                    *provider == host || *provider_with_port == with_port
+                })
+        } else {
+            self.configured.contains(&host) || self.configured.contains(&with_port)
+        };
+        allowed && matches!(url.scheme(), "http" | "https")
+    }
+}
+
 /// What every `run` Task shares. It also makes the provider calls a run's waits need:
 /// status checks, billing checks and cancellations.
 #[derive(Clone)]
@@ -152,13 +181,50 @@ pub struct MediaWork {
     pub store: MediaStore,
     pub catalog: Arc<Catalog>,
     pub provider: ProviderClient,
-    /// Fetches outputs and moves their bytes to object storage. It never carries the
-    /// provider's API key.
+    /// Moves outputs' bytes to object storage. It never carries the provider's API key.
     pub http: reqwest::Client,
     pub settings: Arc<RunSettings>,
+    output_hosts: OutputHosts,
+    /// Fetches outputs. It follows a redirect only to an allowed host.
+    outputs: reqwest::Client,
 }
 
 impl MediaWork {
+    /// The work of Media's runs. Outputs are fetched through a client of their own,
+    /// which follows at most three redirects, each to an allowed host.
+    pub fn new(
+        store: MediaStore,
+        catalog: Arc<Catalog>,
+        provider: ProviderClient,
+        http: reqwest::Client,
+        settings: Arc<RunSettings>,
+    ) -> anyhow::Result<Self> {
+        let output_hosts = OutputHosts {
+            configured: settings.output_hosts.clone(),
+            provider: provider.host(),
+        };
+        let redirects = output_hosts.clone();
+        let outputs = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::custom(move |attempt| {
+                if attempt.previous().len() > OUTPUT_REDIRECTS || !redirects.admit(attempt.url()) {
+                    attempt.stop()
+                } else {
+                    attempt.follow()
+                }
+            }))
+            .build()
+            .context("building the output client")?;
+        Ok(Self {
+            store,
+            catalog,
+            provider,
+            http,
+            settings,
+            output_hosts,
+            outputs,
+        })
+    }
+
     /// The generation operation of a run under the configured completion.
     fn generation(&self) -> OperationSpec {
         match self.settings.completion {
@@ -654,29 +720,24 @@ async fn store_output(
 ) -> anyhow::Result<GeneratedArtifact> {
     let url = Url::parse(url).context("the provider named an output that is no URL")?;
     let settings = &media.settings;
-    let (host, with_port) =
+    let (_, with_port) =
         authority(&url).ok_or_else(|| anyhow!("the output's URL names no host"))?;
-    let allowed = if settings.output_hosts.is_empty() {
-        media
-            .provider
-            .host()
-            .is_some_and(|(provider, provider_with_port)| {
-                provider == host || provider_with_port == with_port
-            })
-    } else {
-        settings.output_hosts.contains(&host) || settings.output_hosts.contains(&with_port)
-    };
-    if !matches!(url.scheme(), "http" | "https") || !allowed {
+    if !media.output_hosts.admit(&url) {
         return Err(anyhow!("the output's host {with_port} is not allowed"));
     }
     let response = media
-        .http
+        .outputs
         .get(url.clone())
         .timeout(settings.output_timeout)
         .send()
         .await
         .map_err(|error| anyhow!("fetching the output failed: {}", error.without_url()))?;
     let status = response.status();
+    if status.is_redirection() {
+        return Err(anyhow!(
+            "the output redirected off the allowed hosts or past {OUTPUT_REDIRECTS} redirects"
+        ));
+    }
     if !status.is_success() {
         return Err(anyhow!("fetching the output answered HTTP {status}"));
     }

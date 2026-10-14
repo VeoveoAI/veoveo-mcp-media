@@ -146,13 +146,7 @@ async fn serve(
     .await
     .context("discovering the Gateway's token endpoint")?;
     let settings = Arc::new(args.run_settings()?);
-    let work = MediaWork {
-        store: store.clone(),
-        catalog: catalog.clone(),
-        provider,
-        http,
-        settings,
-    };
+    let work = MediaWork::new(store.clone(), catalog.clone(), provider, http, settings)?;
     let mut worker = TaskWorker::new(runtime.clone()).calls(calls).usage(usage);
     // The installation's public origin selects webhook completion, with callback URLs
     // under Media's path on it; without one, runs send no callback URL and check the

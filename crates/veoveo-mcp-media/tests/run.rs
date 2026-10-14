@@ -4,7 +4,14 @@
 //! private RustFS for the run's caller, and records the run's estimated and actual cost.
 mod support;
 
-use std::{collections::BTreeSet, time::Duration};
+use std::{
+    collections::BTreeSet,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 
 use axum::http::StatusCode;
 use chrono::{TimeDelta, Utc};
@@ -372,6 +379,46 @@ async fn a_large_output_streams_into_artifact_in_parts_and_is_verified() {
             .await;
         assert_eq!(bytes.len() as u64, LARGE_BYTES);
         assert!(bytes == expected(LARGE_BYTES), "the stored bytes differ");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn an_output_redirected_off_the_allowed_hosts_fails_the_run_unfetched() {
+    within(async {
+        let harness = harness(true).await;
+        // A listener under another host name counts every connection that reaches it.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let reached = Arc::new(AtomicU64::new(0));
+        tokio::spawn({
+            let reached = reached.clone();
+            async move {
+                while listener.accept().await.is_ok() {
+                    reached.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        });
+        let elsewhere = url::Url::parse(&format!("http://localhost:{port}/output.png")).unwrap();
+        harness.fake().redirect_outputs(Some(elsewhere));
+
+        let task = harness.run(IMAGE_MODEL, prompt()).await;
+        let failed = harness
+            .until(&task, |view| view["status"] == "failed")
+            .await;
+        assert!(
+            failed["statusMessage"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("redirected off the allowed hosts"),
+            "{failed}"
+        );
+        let stored = harness
+            .stored_until(&task, |snapshot| snapshot.status == TaskStatus::Failed)
+            .await;
+        assert_eq!(stored.error.unwrap().code, "output_not_stored");
+        assert_eq!(status_of(&harness, &task).await, PredictionStatus::Failed);
+        assert_eq!(reached.load(Ordering::SeqCst), 0);
     })
     .await;
 }

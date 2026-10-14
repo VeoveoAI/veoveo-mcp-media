@@ -336,13 +336,14 @@ pub async fn harness_for(
     );
     let mesh = mesh.granting(granted).start();
     let events = settings.completion == RunCompletion::Events;
-    let work = MediaWork {
-        store: store.clone(),
-        catalog: catalog.clone(),
+    let work = MediaWork::new(
+        store.clone(),
+        catalog.clone(),
         provider,
         http,
-        settings: Arc::new(settings),
-    };
+        Arc::new(settings),
+    )
+    .unwrap();
     let mut harness = Harness {
         db,
         mesh,

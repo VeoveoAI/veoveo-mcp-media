@@ -141,7 +141,9 @@ Each output is one durable step. Media fetches the output from its URL and strea
 into Artifact through `ArtifactClient`, bound to the run's Task, so the artifact belongs
 to the run's caller and records Media as the acting server and the Task as its
 provenance. The fetch reaches only allowed hosts, the provider's own by default, and is
-bounded by `MEDIA_OUTPUT_MAX_BYTES` and a 15-minute timeout. No output is held in
+bounded by `MEDIA_OUTPUT_MAX_BYTES` and a 15-minute timeout. Media follows at most three
+redirects, each to an allowed host over HTTP or HTTPS; a redirect anywhere else fails
+the output. No output is held in
 memory whole. The upload carries the idempotency key `media:{task}:output:{index}`, the
 caller's labels and metadata naming the Task, the prediction, the model and the index,
 and waits for Artifact to verify the bytes. A result links each output by its address,
@@ -234,7 +236,7 @@ signs the client assertions of its token exchanges.
 |---|---|
 | Unit tests | Identities, resource routes, permissions, webhook signatures, the provider client's address, status-endpoint and redaction rules, the catalog's pages, cursors and input checks, the requirement table and tool annotations, prompts and configuration |
 | `tests/store.rs` | The `media` schema on PostgreSQL: run states and their first ending, reads by owner and labels, keyset pages and their cursors, and the sweep |
-| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; a large output in parts; a provider failure; a caller without the run permission; completion through status checks |
+| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks |
 | `tests/database_conformance.rs` | Core's database rules over every statement and the schema |
 | `tests/acceptance.rs` | Ignored by default: a run through the Gateway of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run |
 | `tests/provider_qualification.rs` | Ignored by default and gated by `MEDIA_PROVIDER_QUALIFICATION=1`: one billed generation with the real provider through the full flow |
