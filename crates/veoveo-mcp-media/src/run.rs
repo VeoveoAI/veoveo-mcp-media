@@ -22,6 +22,7 @@ use veoveo_mcp_artifact::{
         MediaType, ObjectSize, RetentionDays,
     },
 };
+use veoveo_platform_store::TenantId as StoredTenant;
 use veoveo_sdk_rust::{
     durable_tasks::{TaskContext, TaskStop, TaskWorkError, TaskWorker, mcp_task_completion},
     hosting::product_result,
@@ -50,7 +51,7 @@ use crate::{
         prediction_of,
         wire::{Outcome, Prediction},
     },
-    store::{MediaStore, MediaStoreError, RunEnding, RunOwner},
+    store::{MediaStore, MediaStoreError, stored_tenant},
 };
 
 /// The Task operation of `run`.
@@ -312,8 +313,8 @@ impl RunFailure {
         });
         if stored {
             Self::new(
-                RunFailureCode::StoreUnavailable,
-                "the installation database could not record the run's progress",
+                RunFailureCode::StoreRefused,
+                "the installation database refused to record the run's progress",
             )
         } else {
             Self::new(
@@ -324,16 +325,14 @@ impl RunFailure {
     }
 }
 
-/// The owner of a run's rows, from its Task's owner.
-fn owner(ctx: &TaskContext) -> anyhow::Result<RunOwner> {
-    let owner = &ctx.task().owner;
-    RunOwner::new(
-        &owner.authority.tenant,
-        &owner.principal_key,
-        owner.data_labels.clone(),
-    )
-    .context("the Task names no stored owner")
+/// The stored tenant of a run's row, from its Task's owner.
+fn tenant(ctx: &TaskContext) -> anyhow::Result<StoredTenant> {
+    stored_tenant(&ctx.task().owner.tenant()).context("the Task names no stored tenant")
 }
+
+/// The Task's status message while Media stores a run's outputs, which names the run's
+/// storing phase.
+pub const STORING_MESSAGE: &str = "Storing the outputs";
 
 /// An amount of US dollars, to the micro-dollar, never negative: a refund larger than
 /// its deduction nets to zero.
@@ -347,8 +346,9 @@ fn usd(amount: f64) -> anyhow::Result<Money> {
 }
 
 /// One `run` Task's work. An error none of its steps handled fails the run under a
-/// code that names its cause, and its row with it, unless the Task parked, stopped with
-/// its process or left this worker: those keep the Task for its wait or its recovery.
+/// code that names its cause, unless the Task parked, stopped with its process or left
+/// this worker: those keep the Task for its wait or its recovery. The Task alone records
+/// how the run ended.
 pub async fn run(ctx: TaskContext, media: MediaWork) -> anyhow::Result<TaskTransition> {
     match attempt(&ctx, &media).await {
         Err(error) if !keeps_the_task(&error) && !ctx.stopping() => {
@@ -359,7 +359,7 @@ pub async fn run(ctx: TaskContext, media: MediaWork) -> anyhow::Result<TaskTrans
                 error = %format!("{error:#}"),
                 "a run failed on an unexpected error"
             );
-            fail(&media, &owner(&ctx)?, ctx.task_id(), None, failure).await
+            Ok(fail(failure))
         }
         outcome => outcome,
     }
@@ -368,11 +368,11 @@ pub async fn run(ctx: TaskContext, media: MediaWork) -> anyhow::Result<TaskTrans
 async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTransition> {
     let request: RunRequest = serde_json::from_value(ctx.task().request.clone())
         .context("the Task's request is no run request")?;
-    let owner = owner(ctx)?;
+    let tenant = tenant(ctx)?;
     let task_id = ctx.task_id();
     media
         .store
-        .record_run(&owner, task_id, &request.model, ctx.task().created_at)
+        .record_run(tenant, task_id, &request.model, ctx.task().created_at)
         .await?;
     let generation = media.generation();
     // Before the run reaches the provider: check its input, stop on a cancellation and
@@ -380,21 +380,11 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
     let dispatched = ctx.runtime().operation(task_id, &generation.key).await?;
     if dispatched.is_none() {
         if let Err(failure) = admit(media, &request) {
-            return fail(media, &owner, task_id, None, failure).await;
+            return Ok(fail(failure));
         }
         match ctx.checkpoint().await {
             Ok(()) => {}
-            Err(TaskStop::Cancelled) => {
-                end(
-                    media,
-                    &owner,
-                    task_id,
-                    None,
-                    &RunEnding::Cancelled(Vec::new()),
-                )
-                .await?;
-                return Ok(TaskTransition::Cancelled);
-            }
+            Err(TaskStop::Cancelled) => return Ok(TaskTransition::Cancelled),
             Err(stop) => return Err(stop.into()),
         }
         // The provider's quote for this input is the estimate. It is a durable step, so
@@ -417,7 +407,7 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
                         RunFailureCode::PriceUnavailable,
                         format!("the provider could not quote the run's price: {error}"),
                     );
-                    return fail(media, &owner, task_id, None, failure).await;
+                    return Ok(fail(failure));
                 }
                 Err(error) => return Err(error),
             },
@@ -433,7 +423,6 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
     // completion sends its callback URL; a run under checks completion sends none.
     let provider = media.provider.clone();
     let store = media.store.clone();
-    let tenant = owner.tenant();
     let model = request.model.clone();
     let input = request.input.clone();
     let operation = ctx
@@ -447,13 +436,12 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
                     {
                         Ok(prediction) => {
                             store
-                                .mark_processing(
+                                .record_submission(
                                     tenant,
                                     task_id,
                                     Some(&prediction.id),
                                     prediction.urls.as_ref().map(|urls| urls.get.as_str()),
                                     None,
-                                    Utc::now(),
                                 )
                                 .await?;
                             Ok(Submission::job(ExternalJobId::parse(prediction.id.as_str())?))
@@ -479,7 +467,7 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
                     RunFailureCode::ProviderRefused,
                     format!("the provider refused the run: {refusal}"),
                 );
-                return fail(media, &owner, task_id, None, failure).await;
+                return Ok(fail(failure));
             }
             Err(error) => return Err(error),
         },
@@ -493,13 +481,12 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
     let completion = completion_mode(&operation.completion);
     media
         .store
-        .mark_processing(
-            owner.tenant(),
+        .record_submission(
+            tenant,
             task_id,
             prediction_id.as_ref(),
             None,
             Some(completion),
-            Utc::now(),
         )
         .await?;
     // Park until the provider's outcome arrives. Nothing checks for cancellation before
@@ -508,30 +495,12 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
     let prediction = match outcome {
         WaitOutcome::Settled(prediction) => prediction,
         WaitOutcome::Expired => {
-            end(
-                media,
-                &owner,
-                task_id,
-                prediction_id.as_ref(),
-                &RunEnding::Unresolved,
-            )
-            .await?;
-            return Ok(TaskTransition::Failed(TaskFailure::new(
-                RunFailureCode::GenerationUnresolved.as_str(),
+            return Ok(fail(RunFailure::new(
+                RunFailureCode::GenerationUnresolved,
                 "the provider reported no outcome before the deadline",
             )));
         }
-        WaitOutcome::Cancelled { .. } => {
-            end(
-                media,
-                &owner,
-                task_id,
-                prediction_id.as_ref(),
-                &RunEnding::Cancelled(Vec::new()),
-            )
-            .await?;
-            return Ok(TaskTransition::Cancelled);
-        }
+        WaitOutcome::Cancelled { .. } => return Ok(TaskTransition::Cancelled),
     };
     match prediction.outcome() {
         Some(Outcome::Completed) => {}
@@ -547,14 +516,17 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
                     Some(Outcome::Cancelled) => "the provider cancelled the prediction".into(),
                     _ => "the provider failed the prediction".into(),
                 });
-            let failure = RunFailure::new(RunFailureCode::GenerationFailed, reason);
-            return fail(media, &owner, task_id, Some(&prediction.id), failure).await;
+            return Ok(fail(RunFailure::new(
+                RunFailureCode::GenerationFailed,
+                reason,
+            )));
         }
     }
-    media
-        .store
-        .mark_storing(owner.tenant(), task_id, &prediction.id, Utc::now())
-        .await?;
+    ctx.update(TaskTransition::Running {
+        message: STORING_MESSAGE.into(),
+        progress: 0.5,
+    })
+    .await?;
     let mut outputs = Vec::with_capacity(prediction.outputs.len());
     for (index, url) in prediction.outputs.iter().enumerate() {
         let key = StepKey::parse(format!("output-{index}"))?;
@@ -568,11 +540,10 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
             Err(error) if is_task_stop(&error) => return Err(error),
             Err(error) => {
                 reconcile_billing(ctx, media, &prediction.id).await?;
-                let failure = RunFailure::new(
+                return Ok(fail(RunFailure::new(
                     RunFailureCode::OutputNotStored,
                     format!("output {index} could not be stored: {error:#}"),
-                );
-                return fail(media, &owner, task_id, Some(&prediction.id), failure).await;
+                )));
             }
         }
     }
@@ -594,14 +565,10 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
         },
         artifacts: outputs.clone(),
     };
-    end(
-        media,
-        &owner,
-        task_id,
-        Some(&prediction.id),
-        &RunEnding::Succeeded(outputs),
-    )
-    .await?;
+    media
+        .store
+        .record_outputs(tenant, task_id, &prediction.id, &outputs)
+        .await?;
     let result_uri = result.result_uri.to_uri()?;
     let completion = product_result(
         GENERATION_COMPLETED,
@@ -666,45 +633,9 @@ fn admit(media: &MediaWork, request: &RunRequest) -> Result<(), RunFailure> {
     }
 }
 
-async fn end(
-    media: &MediaWork,
-    owner: &RunOwner,
-    task_id: TaskId,
-    prediction: Option<&MediaPredictionId>,
-    ending: &RunEnding,
-) -> anyhow::Result<()> {
-    media
-        .store
-        .finish(owner.tenant(), task_id, prediction, ending, Utc::now())
-        .await
-        .context("recording the run's end")?;
-    Ok(())
-}
-
-/// Fail the run. The Task records the failure even when its row cannot: reads take the
-/// Task's ending, and the sweep copies it into the row.
-async fn fail(
-    media: &MediaWork,
-    owner: &RunOwner,
-    task_id: TaskId,
-    prediction: Option<&MediaPredictionId>,
-    failure: RunFailure,
-) -> anyhow::Result<TaskTransition> {
-    if let Err(error) = end(
-        media,
-        owner,
-        task_id,
-        prediction,
-        &RunEnding::Failed(failure.message.clone()),
-    )
-    .await
-    {
-        tracing::warn!(task = %task_id, error = %format!("{error:#}"), "a failed run's row kept its progress");
-    }
-    Ok(TaskTransition::Failed(TaskFailure::new(
-        failure.code.as_str(),
-        failure.message,
-    )))
+/// The Task's failure under the code and message that name its cause.
+fn fail(failure: RunFailure) -> TaskTransition {
+    TaskTransition::Failed(TaskFailure::new(failure.code.as_str(), failure.message))
 }
 
 /// Reconcile the prediction's bill through bounded checks and record the actual cost. A

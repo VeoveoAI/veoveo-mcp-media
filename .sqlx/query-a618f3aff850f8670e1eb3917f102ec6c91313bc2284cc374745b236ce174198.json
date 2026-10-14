@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- The run's outputs, stored in Artifact, under the prediction that made them.\nUPDATE media.prediction\nSET outputs = $3, prediction_id = COALESCE(prediction_id, $4)\nWHERE tenant = $1 AND task_id = $2\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a618f3aff850f8670e1eb3917f102ec6c91313bc2284cc374745b236ce174198"
+}

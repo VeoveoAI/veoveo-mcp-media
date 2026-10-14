@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (the sweep walks every tenant's runs past their retention)\n-- One batch of runs recorded before the cutoff, oldest first, after the previous batch's\n-- last run. The first batch's bound precedes every run, so the keyset stays an index\n-- range in a generic plan.\nSELECT tenant AS \"tenant: StoredTenant\", task_id, created_at\nFROM media.prediction\nWHERE created_at < $1\n    AND (created_at, task_id) > (\n        coalesce($2::timestamptz, '-infinity'),\n        coalesce($3::uuid, '00000000-0000-0000-0000-000000000000')\n    )\nORDER BY created_at, task_id\nLIMIT $4\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant: StoredTenant",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "tenant"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "task_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "task_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "70cdafe0c89cd16075da5977d10cc5d7a8836619c65c19d174fd258ccfa9bc5e"
+}

@@ -12,7 +12,10 @@ cost in core's usage ledger.
 
 ## Invariants
 
-- Owns the `media://` URI scheme and the PostgreSQL schema `media`. Identity: slug
+- Owns the `media://` URI scheme and the PostgreSQL schema `media`, and its SQL touches
+  no other schema. A run's owner, status, failure and times are its Task's, read
+  through core's Task runtime; `media.prediction` keeps only what Media alone knows
+  about the run, and nothing copies the Task's state. Identity: slug
   `media`, MCP `/media/mcp`, provider callbacks `/media/operations/{operation_id}/{token}`,
   port 8802.
 - The provider stays inside `src/provider/`. User-facing names, configuration keys and

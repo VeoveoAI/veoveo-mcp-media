@@ -37,7 +37,7 @@ use crate::{
         GenerationResult, ModelCatalogPage, ModelSchema, ModelSchemaRequest, ModelsRequest,
         RunRequest,
     },
-    store::MediaStore,
+    predictions::Predictions,
 };
 
 pub use declarations::{REGISTRATION, registration};
@@ -59,9 +59,9 @@ pub fn force_setup() {
     std::sync::LazyLock::force(&SERVER_SETUP);
 }
 
-/// What every handler shares: the run store and the model catalog.
+/// What every handler shares: the caller's predictions and the model catalog.
 pub struct MediaApp {
-    pub store: MediaStore,
+    pub predictions: Predictions,
     pub catalog: Arc<Catalog>,
 }
 

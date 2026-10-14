@@ -1,10 +1,9 @@
 //! Reads of Media's resources. The catalog reads come from the current registry snapshot;
-//! every prediction read is private to its caller, because a run's owner and labels decide
-//! who may see it.
+//! every prediction read is private to its caller, because the run's Task decides who
+//! may see it.
 use rmcp::{
     ErrorData as McpError, RoleServer, model::ReadResourceRequestParams, service::RequestContext,
 };
-use veoveo_platform_store::PageSize;
 use veoveo_sdk_rust::hosting::{DomainRead, json_read, served_by_host};
 
 use crate::{
@@ -12,18 +11,15 @@ use crate::{
         GENERATION_FORMAT, GenerationResult, MediaResource, ModelsRequest, PredictionEntry,
         PredictionListing, PredictionStatus, PredictionView,
     },
-    store::PredictionRow,
+    predictions::Prediction,
 };
 
 use super::{
     MediaApp,
-    errors::{catalog_error, store_error},
+    errors::{catalog_error, prediction_error, store_error},
     identity,
     requirements::{Target, require},
 };
-
-/// Runs a prediction page holds.
-const PREDICTIONS_PER_PAGE: u32 = 100;
 
 fn missing() -> McpError {
     McpError::invalid_params("no such prediction", None)
@@ -65,16 +61,11 @@ pub(super) async fn read(
         }
         MediaResource::Predictions { cursor } => {
             let identity = require(context, Target::Resource(uri))?;
-            let reader = identity::reader(&identity)?;
             let page = app
-                .store
-                .predictions_page(
-                    &reader,
-                    cursor.as_ref(),
-                    PageSize::new(PREDICTIONS_PER_PAGE).expect("a page size within the bound"),
-                )
+                .predictions
+                .page(&identity::task_owner(&identity)?, cursor.as_ref())
                 .await
-                .map_err(store_error)?;
+                .map_err(prediction_error)?;
             let predictions = page.items.iter().map(entry).collect::<Result<_, _>>()?;
             json_read(
                 uri,
@@ -86,14 +77,13 @@ pub(super) async fn read(
         }
         MediaResource::Prediction(prediction) => {
             let identity = require(context, Target::Resource(uri))?;
-            let reader = identity::reader(&identity)?;
-            let row = app
-                .store
-                .prediction(&reader, &prediction)
+            let found = app
+                .predictions
+                .prediction(&identity::task_owner(&identity)?, &prediction)
                 .await
-                .map_err(store_error)?
+                .map_err(prediction_error)?
                 .ok_or_else(missing)?;
-            let summary = row.summary().map_err(store_error)?;
+            let summary = found.summary().map_err(store_error)?;
             let result_uri = (summary.status == PredictionStatus::Succeeded)
                 .then(|| MediaResource::Result(prediction.clone()));
             json_read(
@@ -106,14 +96,13 @@ pub(super) async fn read(
         }
         MediaResource::Result(prediction) => {
             let identity = require(context, Target::Resource(uri))?;
-            let reader = identity::reader(&identity)?;
-            let row = app
-                .store
-                .prediction(&reader, &prediction)
+            let found = app
+                .predictions
+                .prediction(&identity::task_owner(&identity)?, &prediction)
                 .await
-                .map_err(store_error)?
+                .map_err(prediction_error)?
                 .ok_or_else(missing)?;
-            let summary = row.summary().map_err(store_error)?;
+            let summary = found.summary().map_err(store_error)?;
             if summary.status != PredictionStatus::Succeeded {
                 return Err(McpError::invalid_params(
                     format!(
@@ -129,7 +118,7 @@ pub(super) async fn read(
                     format: GENERATION_FORMAT.into(),
                     task_id: summary.task_id,
                     result_uri: MediaResource::Result(prediction),
-                    artifacts: row.outputs().to_vec(),
+                    artifacts: found.outputs().to_vec(),
                     prediction: summary,
                 },
             )?
@@ -138,8 +127,8 @@ pub(super) async fn read(
     Ok(DomainRead::no_store(result))
 }
 
-fn entry(row: &PredictionRow) -> Result<PredictionEntry, McpError> {
-    let prediction = row.summary().map_err(store_error)?;
+fn entry(found: &Prediction) -> Result<PredictionEntry, McpError> {
+    let prediction = found.summary().map_err(store_error)?;
     Ok(PredictionEntry {
         prediction_uri: prediction
             .prediction_id

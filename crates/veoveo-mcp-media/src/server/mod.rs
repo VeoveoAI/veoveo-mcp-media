@@ -24,6 +24,7 @@ use veoveo_task_runtime::{TaskRuntime, TaskRuntimeConfig};
 use crate::{
     catalog::Catalog,
     mcp::{self, MediaApp, MediaMcp, MediaSubscriptions, MediaTasks, watch_changes},
+    predictions::Predictions,
     provider::{ProviderClient, ProviderWebhooks},
     run::{self, MediaUsage, MediaWork},
     store::MediaStore,
@@ -163,8 +164,9 @@ async fn serve(
         None => tracing::info!("runs complete through bounded status checks"),
     }
     let hub = Arc::new(SubscriptionHub::new());
+    let predictions = Predictions::new(runtime.clone(), store.clone());
     let app = Arc::new(MediaApp {
-        store: store.clone(),
+        predictions: predictions.clone(),
         catalog: catalog.clone(),
     });
     let tasks = MediaTasks::new(
@@ -173,12 +175,12 @@ async fn serve(
         catalog.clone(),
         args.run_retention(),
     );
-    let subscriptions = MediaSubscriptions::new(store.clone(), hub.clone());
+    let subscriptions = MediaSubscriptions::new(predictions.clone(), hub.clone());
 
     let stop = CancellationToken::new();
     let refreshing = tokio::spawn(catalog.clone().keep_fresh(stop.clone()));
-    let watching = tokio::spawn(watch_changes(store.clone(), hub));
-    let sweeping = tokio::spawn(sweep(store.clone(), args.run_retention(), stop.clone()));
+    let watching = tokio::spawn(watch_changes(store.clone(), runtime.clone(), hub));
+    let sweeping = tokio::spawn(sweep(predictions, args.run_retention(), stop.clone()));
     let mut working = tokio::spawn(run::work(worker, work, stop.clone()));
 
     let hosted = HostedServer::for_domain::<MediaMcp>()
@@ -225,31 +227,13 @@ async fn serve(
     served
 }
 
-/// Settle runs whose Task ended without them, then delete ended runs past their
-/// retention, in batches, until `stop`.
-async fn sweep(store: MediaStore, retention: Duration, stop: CancellationToken) {
+/// Delete the rows of runs past their retention whose Task core's Task runtime no longer
+/// holds, every [`SWEEP_INTERVAL`], until `stop`.
+async fn sweep(predictions: Predictions, retention: Duration, stop: CancellationToken) {
     let retention = chrono::TimeDelta::from_std(retention).unwrap_or(chrono::TimeDelta::MAX);
     loop {
-        let cutoff = Utc::now() - retention;
-        loop {
-            match store.settle(cutoff).await {
-                Ok(0) => break,
-                Ok(_) => continue,
-                Err(error) => {
-                    tracing::warn!(%error, "the Media sweep could not settle ended runs");
-                    break;
-                }
-            }
-        }
-        loop {
-            match store.prune(cutoff).await {
-                Ok(0) => break,
-                Ok(_) => continue,
-                Err(error) => {
-                    tracing::warn!(%error, "the Media sweep could not prune ended runs");
-                    break;
-                }
-            }
+        if let Err(error) = predictions.prune(Utc::now() - retention).await {
+            tracing::warn!(%error, "the Media sweep could not prune runs");
         }
         tokio::select! {
             () = stop.cancelled() => return,

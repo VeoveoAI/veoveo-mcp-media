@@ -2,7 +2,7 @@
 //! the database or the Task runtime is logged and reported without detail.
 use rmcp::ErrorData as McpError;
 
-use crate::{catalog::CatalogError, store::MediaStoreError};
+use crate::{catalog::CatalogError, predictions::PredictionError, store::MediaStoreError};
 
 pub(crate) fn catalog_error(error: CatalogError) -> McpError {
     match error {
@@ -18,11 +18,18 @@ pub(crate) fn catalog_error(error: CatalogError) -> McpError {
 
 pub(crate) fn store_error(error: MediaStoreError) -> McpError {
     match error {
-        MediaStoreError::StaleCursor => McpError::invalid_params(error.to_string(), None),
-        MediaStoreError::InvalidOwner => McpError::invalid_request(error.to_string(), None),
+        MediaStoreError::InvalidTenant => McpError::invalid_request(error.to_string(), None),
         failure @ (MediaStoreError::Corrupt(_)
         | MediaStoreError::PredictionConflict(_)
         | MediaStoreError::Database(_)) => internal(&failure),
+    }
+}
+
+pub(crate) fn prediction_error(error: PredictionError) -> McpError {
+    match error {
+        PredictionError::StaleCursor => McpError::invalid_params(error.to_string(), None),
+        PredictionError::Store(error) => store_error(error),
+        PredictionError::Tasks(error) => internal(&error),
     }
 }
 

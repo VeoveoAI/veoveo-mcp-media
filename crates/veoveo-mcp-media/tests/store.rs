@@ -1,17 +1,17 @@
-//! Media's run rows on a fresh database migrated as the server's own login: recording,
-//! progress and endings, reads filtered by owner and labels, keyset pages and the sweep.
-use std::{collections::BTreeSet, time::Duration};
+//! Media's run rows on a fresh database migrated as the server's own login: recording a
+//! run, its submission and its outputs, reads by Task and by prediction, a provider's
+//! repeated prediction, and the sweep's walk through runs past their retention. Who may
+//! see a run, and how it stands, is its Task's, which `tests/run.rs` covers.
+use std::time::Duration;
 
 use chrono::{TimeDelta, Utc};
 use veoveo_mcp_media::{
-    contract::{
-        CompletionMode, GeneratedArtifact, ListCursor, MediaModelId, MediaPredictionId,
-        PredictionStatus,
-    },
-    store::{MediaStore, PredictionPageSize, RunEnding, RunOwner},
+    contract::{CompletionMode, GeneratedArtifact, MediaModelId, MediaPredictionId},
+    store::{MediaStore, MediaStoreError, SWEEP_BATCH, stored_tenant},
 };
+use veoveo_platform_store::TenantId as StoredTenant;
 use veoveo_test_fixtures::store::TestDb;
-use veoveo_types::{DataLabelId, PrincipalId, ResourceUri, TaskId, TenantId};
+use veoveo_types::{ResourceUri, TaskId, TenantId};
 
 async fn with_store<F, Fut>(test: F)
 where
@@ -30,16 +30,8 @@ where
     .expect("the store test exceeded 60 seconds");
 }
 
-fn owner(tenant: &str, principal: &str, labels: &[&str]) -> RunOwner {
-    RunOwner::new(
-        &TenantId::parse(tenant).unwrap(),
-        &PrincipalId::parse(principal).unwrap(),
-        labels
-            .iter()
-            .map(|label| DataLabelId::parse(*label).unwrap())
-            .collect::<BTreeSet<_>>(),
-    )
-    .unwrap()
+fn tenant(name: &str) -> StoredTenant {
+    stored_tenant(&TenantId::parse(name).unwrap()).unwrap()
 }
 
 fn model() -> MediaModelId {
@@ -50,237 +42,154 @@ fn prediction(id: &str) -> MediaPredictionId {
     MediaPredictionId::parse(id).unwrap()
 }
 
-fn page(size: u32) -> PredictionPageSize {
-    PredictionPageSize::new(size).unwrap()
-}
-
 #[tokio::test]
-async fn a_run_moves_through_its_states_and_keeps_its_first_ending() {
+async fn a_run_records_its_submission_and_outputs() {
     with_store(|store| async move {
-        let ada = owner("acme", "ada", &[]);
+        let acme = tenant("acme");
         let task = TaskId::new();
         let now = Utc::now();
-        store.record_run(&ada, task, &model(), now).await.unwrap();
+        store.record_run(acme, task, &model(), now).await.unwrap();
         // A repeat of the start changes nothing.
-        store.record_run(&ada, task, &model(), now).await.unwrap();
-        let row = store.run(ada.tenant(), task).await.unwrap().unwrap();
-        assert_eq!(row.status().unwrap(), PredictionStatus::Queued);
+        store.record_run(acme, task, &model(), now).await.unwrap();
+        let row = store.run(acme, task).await.unwrap().unwrap();
+        assert_eq!(row.model_id().unwrap(), model());
+        assert_eq!(row.prediction_id().unwrap(), None);
+        assert!(row.outputs().is_empty());
+
         store
-            .mark_processing(
-                ada.tenant(),
+            .record_submission(
+                acme,
                 task,
                 Some(&prediction("p-1")),
                 Some("http://provider.test/api/v3/predictions/p-1/result"),
-                Some(CompletionMode::Checks),
-                now,
-            )
-            .await
-            .unwrap();
-        let processing = store.run(ada.tenant(), task).await.unwrap().unwrap();
-        assert_eq!(
-            processing.summary().unwrap().completion,
-            Some(CompletionMode::Checks)
-        );
-        store
-            .mark_storing(ada.tenant(), task, &prediction("p-1"), now)
-            .await
-            .unwrap();
-        let output = GeneratedArtifact {
-            index: 0,
-            artifact_uri: ResourceUri::new(
-                "artifact://artifacts/0199d4a1-7c00-7b3e-9f2a-6c1d2e3f4a5b",
-            )
-            .unwrap(),
-            media_type: "image/png".into(),
-            size: Some(10),
-        };
-        store
-            .finish(
-                ada.tenant(),
-                task,
-                Some(&prediction("p-1")),
-                &RunEnding::Succeeded(vec![output.clone()]),
-                now,
-            )
-            .await
-            .unwrap();
-        store
-            .finish(
-                ada.tenant(),
-                task,
                 None,
-                &RunEnding::Failed("too late".into()),
-                now,
             )
             .await
             .unwrap();
+        // A later call without the prediction keeps it and adds the completion.
+        store
+            .record_submission(acme, task, None, None, Some(CompletionMode::Checks))
+            .await
+            .unwrap();
+        let row = store.run(acme, task).await.unwrap().unwrap();
+        assert_eq!(row.prediction_id().unwrap(), Some(prediction("p-1")));
         assert_eq!(
-            store.status_url(task).await.unwrap().as_deref(),
+            row.status_url.as_deref(),
             Some("http://provider.test/api/v3/predictions/p-1/result")
         );
-        let row = store.run(ada.tenant(), task).await.unwrap().unwrap();
-        let summary = row.summary().unwrap();
-        assert_eq!(summary.status, PredictionStatus::Succeeded);
-        assert_eq!(summary.prediction_id, Some(prediction("p-1")));
-        assert_eq!(summary.output_count, 1);
-        assert_eq!(row.outputs(), [output]);
-        assert_eq!(summary.error, None);
-    })
-    .await;
-}
+        assert_eq!(row.completion().unwrap(), Some(CompletionMode::Checks));
+        assert_eq!(store.status_url(task).await.unwrap(), row.status_url);
 
-#[tokio::test]
-async fn reads_show_only_the_owners_runs_whose_labels_they_hold() {
-    with_store(|store| async move {
-        let now = Utc::now();
-        let ada = owner("acme", "ada", &["secret"]);
-        let ada_plain = owner("acme", "ada", &[]);
-        let bob = owner("acme", "bob", &["secret"]);
-        let other_tenant = owner("other", "ada", &["secret"]);
-        let task = TaskId::new();
-        store.record_run(&ada, task, &model(), now).await.unwrap();
+        let output = GeneratedArtifact {
+            index: 0,
+            artifact_uri: ResourceUri::new("artifact://artifacts/a1").unwrap(),
+            media_type: "image/png".into(),
+            size: Some(4),
+        };
         store
-            .mark_processing(
-                ada.tenant(),
+            .record_outputs(
+                acme,
                 task,
-                Some(&prediction("p-2")),
-                None,
-                None,
-                now,
+                &prediction("p-1"),
+                std::slice::from_ref(&output),
             )
             .await
             .unwrap();
+        let row = store
+            .by_prediction(acme, &prediction("p-1"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.task_id(), task);
+        assert_eq!(row.outputs(), [output]);
+        // Another tenant has no such prediction.
         assert!(
             store
-                .prediction(&ada, &prediction("p-2"))
+                .by_prediction(tenant("globex"), &prediction("p-1"))
                 .await
                 .unwrap()
-                .is_some()
-        );
-        for reader in [&ada_plain, &bob, &other_tenant] {
-            assert!(
-                store
-                    .prediction(reader, &prediction("p-2"))
-                    .await
-                    .unwrap()
-                    .is_none(),
-                "{reader:?}"
-            );
-            assert!(
-                store
-                    .predictions_page(reader, None, page(10))
-                    .await
-                    .unwrap()
-                    .items
-                    .is_empty()
-            );
-        }
-        assert_eq!(
-            store
-                .predictions_page(&ada, None, page(10))
-                .await
-                .unwrap()
-                .items
-                .len(),
-            1
+                .is_none()
         );
     })
     .await;
 }
 
 #[tokio::test]
-async fn pages_run_newest_first_and_a_cursor_pages_only_its_own_listing() {
+async fn a_repeated_prediction_is_a_conflict_and_reads_are_per_tenant() {
     with_store(|store| async move {
+        let (acme, globex) = (tenant("acme"), tenant("globex"));
+        let (first, second, other) = (TaskId::new(), TaskId::new(), TaskId::new());
         let now = Utc::now();
-        let ada = owner("acme", "ada", &[]);
-        let mut tasks = Vec::new();
-        for _ in 0..5 {
-            let task = TaskId::new();
-            store.record_run(&ada, task, &model(), now).await.unwrap();
-            tasks.push(task);
-            tokio::time::sleep(Duration::from_millis(2)).await;
+        for (tenant, task) in [(acme, first), (acme, second), (globex, other)] {
+            store.record_run(tenant, task, &model(), now).await.unwrap();
         }
-        let first = store.predictions_page(&ada, None, page(2)).await.unwrap();
-        assert_eq!(
-            first
-                .items
-                .iter()
-                .map(|row| row.task_id())
-                .collect::<Vec<_>>(),
-            [tasks[4], tasks[3]]
-        );
-        let cursor = first.next.clone().unwrap();
-        let second = store
-            .predictions_page(&ada, Some(&cursor), page(2))
+        store
+            .record_submission(acme, first, Some(&prediction("p-1")), None, None)
             .await
             .unwrap();
-        assert_eq!(
-            second
-                .items
-                .iter()
-                .map(|row| row.task_id())
-                .collect::<Vec<_>>(),
-            [tasks[2], tasks[1]]
+        let conflict = store
+            .record_submission(acme, second, Some(&prediction("p-1")), None, None)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&conflict, MediaStoreError::PredictionConflict(id) if *id == prediction("p-1")),
+            "{conflict}"
         );
-        let last = store
-            .predictions_page(&ada, second.next.as_ref(), page(2))
+        // Another tenant may hold the same prediction identity.
+        store
+            .record_submission(globex, other, Some(&prediction("p-1")), None, None)
             .await
             .unwrap();
-        assert_eq!(last.items.len(), 1);
-        assert_eq!(last.next, None);
-        // Another reader's cursor and a malformed one are refused.
-        let bob = owner("acme", "bob", &[]);
-        assert!(
-            store
-                .predictions_page(&bob, Some(&cursor), page(2))
-                .await
-                .is_err()
-        );
-        let garbage = ListCursor::parse("abc").unwrap();
-        assert!(
-            store
-                .predictions_page(&ada, Some(&garbage), page(2))
-                .await
-                .is_err()
+
+        let mut runs = store
+            .runs(acme, &[first, second, other, TaskId::new()])
+            .await
+            .unwrap();
+        runs.sort_by_key(|row| row.task_id);
+        let mut expected = vec![first, second];
+        expected.sort();
+        assert_eq!(
+            runs.iter().map(|row| row.task_id()).collect::<Vec<_>>(),
+            expected
         );
     })
     .await;
 }
 
 #[tokio::test]
-async fn the_sweep_prunes_only_runs_that_ended_before_the_cutoff() {
+async fn the_sweep_walks_runs_past_their_retention_and_deletes_one_at_a_time() {
     with_store(|store| async move {
-        let ada = owner("acme", "ada", &[]);
+        let acme = tenant("acme");
         let now = Utc::now();
-        let (old, recent, open) = (TaskId::new(), TaskId::new(), TaskId::new());
-        for task in [old, recent, open] {
-            store.record_run(&ada, task, &model(), now).await.unwrap();
+        let old: Vec<TaskId> = (0..3).map(|_| TaskId::new()).collect();
+        for (age, task) in old.iter().enumerate() {
+            let days = 40 + i64::try_from(age).unwrap();
+            store
+                .record_run(acme, *task, &model(), now - TimeDelta::days(days))
+                .await
+                .unwrap();
         }
-        store
-            .finish(
-                ada.tenant(),
-                old,
-                None,
-                &RunEnding::Unresolved,
-                now - TimeDelta::days(40),
-            )
-            .await
-            .unwrap();
-        store
-            .finish(
-                ada.tenant(),
-                recent,
-                None,
-                &RunEnding::Cancelled(Vec::new()),
-                now,
-            )
-            .await
-            .unwrap();
-        assert_eq!(store.prune(now - TimeDelta::days(30)).await.unwrap(), 1);
-        assert_eq!(store.prune(now - TimeDelta::days(30)).await.unwrap(), 0);
-        assert!(store.run(ada.tenant(), old).await.unwrap().is_none());
-        assert!(store.run(ada.tenant(), recent).await.unwrap().is_some());
-        assert!(store.run(ada.tenant(), open).await.unwrap().is_some());
+        let recent = TaskId::new();
+        store.record_run(acme, recent, &model(), now).await.unwrap();
+
+        // Runs past the cutoff come oldest first, and a keyset continues after a batch.
+        let cutoff = now - TimeDelta::days(30);
+        let batch = store.past_retention(cutoff, None).await.unwrap();
+        assert!(batch.len() as i64 <= SWEEP_BATCH);
+        assert_eq!(
+            batch.iter().map(|run| run.task_id).collect::<Vec<_>>(),
+            vec![old[2], old[1], old[0]]
+        );
+        let after = store.past_retention(cutoff, Some(&batch[1])).await.unwrap();
+        assert_eq!(
+            after.iter().map(|run| run.task_id).collect::<Vec<_>>(),
+            vec![old[0]]
+        );
+
+        assert!(store.delete_run(acme, old[1]).await.unwrap());
+        assert!(!store.delete_run(acme, old[1]).await.unwrap());
+        assert!(store.run(acme, old[1]).await.unwrap().is_none());
+        assert!(store.run(acme, recent).await.unwrap().is_some());
     })
     .await;
 }

@@ -20,14 +20,14 @@ use veoveo_sdk_rust::{
     },
     hosting::gateway_identity,
 };
-use veoveo_task_runtime::{CreateTask, RecoveryClass, TaskError, TaskRuntime, TaskStatus};
+use veoveo_task_runtime::{CreateTask, RecoveryClass, TaskError, TaskRuntime};
 use veoveo_types::TaskId;
 
 use crate::{
     catalog::{Catalog, InputError},
     contract::RunRequest,
     run::RUN,
-    store::{MediaStore, RunEnding},
+    store::MediaStore,
 };
 
 use super::{
@@ -92,7 +92,7 @@ impl DurableTaskService for MediaTasks {
                 invalid => McpError::invalid_params(invalid.to_string(), None),
             })?;
         let owner = identity::task_owner(caller)?;
-        let reader = identity::reader(caller)?;
+        let tenant = identity::tenant(caller)?;
         let created = self
             .runtime
             .create(CreateTask {
@@ -110,7 +110,7 @@ impl DurableTaskService for MediaTasks {
             .await
             .map_err(|error| internal(&error))?;
         self.store
-            .record_run(&reader, created.snapshot.task_id, &run.model, Utc::now())
+            .record_run(tenant, created.snapshot.task_id, &run.model, Utc::now())
             .await
             .map_err(store_error)?;
         Ok(Some(CreateTaskResult::new(task_seed(&created.snapshot))))
@@ -141,15 +141,13 @@ impl DurableTaskService for MediaTasks {
         .await
     }
 
-    /// A run cancelled before a worker claimed it never reached the provider: the
-    /// runtime cancels it at once, and its prediction ends with it. A claimed or parked
-    /// run reaches its wait, which carries the cancellation to the provider and ends the
-    /// prediction.
+    /// A run cancelled before a worker claimed it never reaches the provider: the
+    /// runtime cancels it at once. A claimed or parked run reaches its wait, which
+    /// carries the cancellation to the provider. Its prediction reads as its Task does.
     async fn cancel_task(&self, caller: &Self::Caller, task_id: String) -> Result<(), McpError> {
         let unknown = || McpError::invalid_params("unknown task id", None);
         let task = veoveo_task_runtime::parse_task_id(&task_id).map_err(|_| unknown())?;
-        let snapshot = self
-            .runtime
+        self.runtime
             .for_owner(&identity::task_owner(caller)?)
             .cancel(task)
             .await
@@ -157,18 +155,6 @@ impl DurableTaskService for MediaTasks {
                 TaskError::NotFound(_) | TaskError::WrongServer(_) => unknown(),
                 error => internal(&error),
             })?;
-        if snapshot.status == TaskStatus::Cancelled {
-            self.store
-                .finish(
-                    identity::reader(caller)?.tenant(),
-                    task,
-                    None,
-                    &RunEnding::Cancelled(Vec::new()),
-                    Utc::now(),
-                )
-                .await
-                .map_err(store_error)?;
-        }
         Ok(())
     }
 

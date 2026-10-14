@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Delete one run whose Task core's Task runtime no longer holds.\nDELETE FROM media.prediction\nWHERE tenant = $1 AND task_id = $2\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cd22c77702413b4dc3ea2dd07301093e601c1ffb59d8e833d8e60eaa8c3139c5"
+}

@@ -40,6 +40,11 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
   describes.
 - The server owns one PostgreSQL schema named after its slug and applies the crate's
   `migrations/` there at startup. Never edit an applied migration; add a new one.
+- Server SQL touches only the server's own schema. It never reads, joins or references
+  core's schemas (`tasks`, `usage`, `audit`, `identity`, `kernel`): core's state comes
+  only through the SDK and core's runtime API, such as `TaskRuntime::for_owner(..)` for
+  a caller's Tasks. When the API lacks what the server needs, report the gap to core
+  and the SDK instead of working around it in the server.
 - Every SQL statement is a `.sql` file beside the code that runs it, run through sqlx's
   checked `query_file*!` macros. Builds read the committed `.sqlx` metadata, because
   `.cargo/config.toml` sets `SQLX_OFFLINE`. After changing a query or a migration,

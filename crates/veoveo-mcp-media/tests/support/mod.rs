@@ -26,6 +26,7 @@ use veoveo_mcp_media::{
     contract::{MediaPermission, MediaPredictionId},
     fake::{FakeProvider, FakeProviderConfig},
     mcp::{AUTHORIZATION, MediaApp, MediaMcp, MediaSubscriptions, MediaTasks, watch_changes},
+    predictions::Predictions,
     provider::{ProviderClient, ProviderWebhooks},
     run::{self, MediaUsage, MediaWork, RunCompletion, RunSettings},
     store::MediaStore,
@@ -290,7 +291,11 @@ pub async fn harness_for(
         .unwrap();
     let store = MediaStore::new(media_platform.clone());
     let hub = Arc::new(SubscriptionHub::new());
-    background.push(tokio::spawn(watch_changes(store.clone(), hub.clone())));
+    background.push(tokio::spawn(watch_changes(
+        store.clone(),
+        routes.clone(),
+        hub.clone(),
+    )));
 
     let mut mesh = TestMesh::bind().await;
     mesh.register((*ARTIFACT_AUTHORIZATION).clone());
@@ -309,8 +314,9 @@ pub async fn harness_for(
         media(),
     )
     .unwrap();
+    let predictions = Predictions::new(routes.clone(), store.clone());
     let app = Arc::new(MediaApp {
-        store: store.clone(),
+        predictions: predictions.clone(),
         catalog: catalog.clone(),
     });
     let tasks = MediaTasks::new(
@@ -319,7 +325,7 @@ pub async fn harness_for(
         catalog.clone(),
         Duration::from_secs(24 * 60 * 60),
     );
-    let subscriptions = MediaSubscriptions::new(store.clone(), hub);
+    let subscriptions = MediaSubscriptions::new(predictions, hub);
     mesh.serve(
         testing::for_domain::<MediaMcp>()
             .public_routes(operation_callbacks(
@@ -407,6 +413,11 @@ impl Harness {
             .take()
             .expect("the harness runs the fake provider");
         self.fake = Some(fake.restarted().await.unwrap());
+    }
+
+    /// Media's predictions, read through the HTTP process's Task runtime.
+    pub fn predictions(&self) -> Predictions {
+        Predictions::new(self.routes.clone(), self.store.clone())
     }
 
     /// The provider client Media's runs call.

@@ -23,8 +23,9 @@ use veoveo_mcp_artifact::contract::ArtifactPermission;
 use veoveo_mcp_media::{
     contract::{MediaPermission, MediaPredictionId, PredictionStatus},
     fake::{FAILING_MODEL, IMAGE_BYTES, IMAGE_MODEL, LARGE_BYTES, LARGE_MODEL, output_byte},
+    mcp::identity,
+    predictions::Prediction,
     provider::generation_key,
-    store::RunOwner,
 };
 use veoveo_sdk_rust::{
     AccessTokenSubject, ForwardedRequest, GatewayInternalTokenIssuer, GatewayProfileId,
@@ -44,26 +45,23 @@ fn expected(length: u64) -> Vec<u8> {
     (0..length).map(output_byte).collect()
 }
 
-/// The test user's run reader, as Media builds it from the forwarded identity.
-fn reader() -> RunOwner {
-    let principal = testing::principal();
-    let authority = testing::authority();
-    RunOwner::new(
-        &authority.tenant,
-        &principal.id,
-        principal.data_labels.clone(),
-    )
-    .unwrap()
+/// The test user as the owner of their Tasks, as Media reads their predictions.
+fn owner() -> veoveo_task_runtime::TaskOwner {
+    identity::task_owner(&forwarded_user()).unwrap()
+}
+
+/// The test user's prediction of `task`, through core's Task runtime and Media's row.
+async fn prediction_of(harness: &Harness, task: &str) -> Prediction {
+    harness
+        .predictions()
+        .by_task(&owner(), TaskId::parse(task).unwrap())
+        .await
+        .unwrap()
+        .expect("the test user's run")
 }
 
 async fn status_of(harness: &Harness, task: &str) -> PredictionStatus {
-    let row = harness
-        .store
-        .run(reader().tenant(), TaskId::parse(task).unwrap())
-        .await
-        .unwrap()
-        .expect("the run is recorded");
-    row.status().unwrap()
+    prediction_of(harness, task).await.status()
 }
 
 #[tokio::test]
@@ -117,17 +115,10 @@ async fn a_run_stores_its_output_in_artifact_and_records_its_cost() {
             status_of(&harness, &task).await,
             PredictionStatus::Succeeded
         );
-        let page = harness
-            .store
-            .predictions_page(
-                &reader(),
-                None,
-                veoveo_platform_store::PageSize::new(10).unwrap(),
-            )
-            .await
-            .unwrap();
+        let page = harness.predictions().page(&owner(), None).await.unwrap();
         assert_eq!(page.items.len(), 1);
         assert_eq!(page.items[0].outputs().len(), 1);
+        assert_eq!(page.items[0].status(), PredictionStatus::Succeeded);
         assert_eq!(harness.fake().submissions(), 1);
     })
     .await;
@@ -553,14 +544,12 @@ async fn a_run_without_a_callback_completes_through_status_checks() {
             completed["result"]["structuredContent"]["prediction"]["completion"],
             "checks"
         );
-        let row = harness
-            .store
-            .run(reader().tenant(), TaskId::parse(&task).unwrap())
-            .await
-            .unwrap()
-            .unwrap();
         assert_eq!(
-            row.summary().unwrap().completion,
+            prediction_of(&harness, &task)
+                .await
+                .summary()
+                .unwrap()
+                .completion,
             Some(veoveo_mcp_media::contract::CompletionMode::Checks)
         );
     })
@@ -627,31 +616,17 @@ async fn a_restarted_fake_provider_repeats_no_identity_the_database_holds() {
     .await;
 }
 
-/// Make Media's database refuse every update that stores a run's outputs or records its
-/// failure, as a failing database would. Media's group role owns the table.
-async fn refuse_updates(harness: &Harness) {
+/// Make Media's database refuse every update that records a run's outputs, as a failing
+/// database would. Media's group role owns the table.
+async fn refuse_outputs(harness: &Harness) {
     let store = harness.db.server_store(&veoveo_mcp_media::server()).await;
     sqlx::raw_sql(
         "SET ROLE server_media;
-         CREATE FUNCTION media.refuse_update() RETURNS trigger LANGUAGE plpgsql
+         CREATE FUNCTION media.refuse_outputs() RETURNS trigger LANGUAGE plpgsql
              AS $$ BEGIN RAISE EXCEPTION 'injected database failure'; END $$;
-         CREATE TRIGGER refuse_update BEFORE UPDATE ON media.prediction FOR EACH ROW
-             WHEN (NEW.status IN ('storing', 'failed'))
-             EXECUTE FUNCTION media.refuse_update();
-         RESET ROLE;",
-    )
-    .execute(store.pool())
-    .await
-    .unwrap();
-}
-
-/// Let Media's database take every update again.
-async fn allow_updates(harness: &Harness) {
-    let store = harness.db.server_store(&veoveo_mcp_media::server()).await;
-    sqlx::raw_sql(
-        "SET ROLE server_media;
-         DROP TRIGGER refuse_update ON media.prediction;
-         DROP FUNCTION media.refuse_update();
+         CREATE TRIGGER refuse_outputs BEFORE UPDATE ON media.prediction FOR EACH ROW
+             WHEN (NEW.outputs <> OLD.outputs)
+             EXECUTE FUNCTION media.refuse_outputs();
          RESET ROLE;",
     )
     .execute(store.pool())
@@ -660,7 +635,7 @@ async fn allow_updates(harness: &Harness) {
 }
 
 #[tokio::test]
-async fn a_provider_that_repeats_a_prediction_fails_the_second_run_and_its_row_alike() {
+async fn a_provider_that_repeats_a_prediction_fails_the_second_run_as_its_task_ended() {
     within(async {
         let harness = harness(true).await;
         let first = harness.run(IMAGE_MODEL, prompt()).await;
@@ -687,82 +662,51 @@ async fn a_provider_that_repeats_a_prediction_fails_the_second_run_and_its_row_a
             "{}",
             failure.message
         );
-        let row = harness
-            .store
-            .run(reader().tenant(), TaskId::parse(&second).unwrap())
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(row.status, "failed");
-        assert_eq!(row.status().unwrap(), PredictionStatus::Failed);
-        assert_eq!(row.error(), Some(failure.message.clone()));
-        assert_eq!(row.error.as_deref(), Some(failure.message.as_str()));
+        // The second run reads as its Task ended, with the Task's failure.
+        let second = prediction_of(&harness, &second).await;
+        let summary = second.summary().unwrap();
+        assert_eq!(summary.status, PredictionStatus::Failed);
+        assert_eq!(summary.error, Some(failure.message.clone()));
+        assert_eq!(summary.completed_at, stored.completed_at);
 
         // The first run keeps its prediction.
-        let first_row = harness
-            .store
-            .prediction(&reader(), &held)
+        let first_prediction = harness
+            .predictions()
+            .prediction(&owner(), &held)
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(first_row.task_id(), TaskId::parse(&first).unwrap());
-        assert_eq!(first_row.status().unwrap(), PredictionStatus::Succeeded);
+        assert_eq!(
+            first_prediction.task.task_id,
+            TaskId::parse(&first).unwrap()
+        );
+        assert_eq!(first_prediction.status(), PredictionStatus::Succeeded);
     })
     .await;
 }
 
 #[tokio::test]
-async fn a_run_whose_row_cannot_be_written_fails_and_reads_as_its_task_ended() {
+async fn a_run_whose_outputs_the_database_refuses_reads_as_its_task_ended() {
     within(async {
         let harness = harness(true).await;
-        // After the dispatch, the database refuses both to store the outputs and to
-        // record the run's end.
-        refuse_updates(&harness).await;
+        // The database refuses to record the run's stored outputs.
+        refuse_outputs(&harness).await;
         let task = harness.run(IMAGE_MODEL, prompt()).await;
         let stored = harness
             .stored_until(&task, |snapshot| snapshot.status == TaskStatus::Failed)
             .await;
         let failure = stored.error.clone().unwrap();
-        assert_eq!(failure.code, "store_unavailable");
+        assert_eq!(failure.code, "store_refused");
         assert!(!failure.message.contains("injected"), "{}", failure.message);
 
-        // The row kept its progress, and every read follows the Task.
-        let id = TaskId::parse(&task).unwrap();
-        let row = harness
-            .store
-            .run(reader().tenant(), id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(row.status, "processing");
-        assert_eq!(row.status().unwrap(), PredictionStatus::Failed);
-        assert_eq!(row.error(), Some(failure.message.clone()));
-        assert_eq!(row.completed_at(), stored.completed_at);
-        let page = harness
-            .store
-            .predictions_page(
-                &reader(),
-                None,
-                veoveo_platform_store::PageSize::new(10).unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(page.items[0].status().unwrap(), PredictionStatus::Failed);
-
-        // Once the database takes writes again, the sweep copies the Task's ending into
-        // the row, once.
-        allow_updates(&harness).await;
-        assert_eq!(harness.store.settle(Utc::now()).await.unwrap(), 1);
-        assert_eq!(harness.store.settle(Utc::now()).await.unwrap(), 0);
-        let row = harness
-            .store
-            .run(reader().tenant(), id)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(row.status, "failed");
-        assert_eq!(row.error.as_deref(), Some(failure.message.as_str()));
-        assert_eq!(row.completed_at, stored.completed_at);
+        // Every read shows the Task's end: nothing in Media copies it.
+        let summary = prediction_of(&harness, &task).await.summary().unwrap();
+        assert_eq!(summary.status, PredictionStatus::Failed);
+        assert_eq!(summary.error, Some(failure.message.clone()));
+        assert_eq!(summary.completed_at, stored.completed_at);
+        let page = harness.predictions().page(&owner(), None).await.unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].status(), PredictionStatus::Failed);
     })
     .await;
 }

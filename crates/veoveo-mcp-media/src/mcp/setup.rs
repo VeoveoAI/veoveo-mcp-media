@@ -99,7 +99,7 @@ fn resources() -> Result<Vec<McpResource<MediaResource>>, McpSetupError> {
     resources.push(described(
         MediaResource::predictions(),
         "Your predictions",
-        "The first page of up to 50 of your runs, newest first.",
+        "The first page of up to 100 of your runs, in the order they started.",
         "application/json",
     )?);
     Ok(resources)
@@ -128,7 +128,7 @@ fn resource_templates() -> Result<Vec<McpResourceTemplate>, McpSetupError> {
         (
             "media://predictions{?cursor}",
             "Your predictions",
-            "A page of your runs, newest first.",
+            "A page of your runs, in the order they started.",
             "application/json",
         ),
         (

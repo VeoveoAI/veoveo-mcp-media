@@ -88,13 +88,18 @@ a bad request fails at once and costs nothing.
 | `media://docs`, `media://docs/{doc_id}`, `media://contract` | The embedded documents and the contract declaration |
 | `media://models{?query,type,limit,cursor}` | A catalog page of 20 models by default and at most 100, in model identity order |
 | `media://model/{+model_id}` | One model and the JSON Schema of its input |
-| `media://predictions{?cursor}` | A page of the caller's runs, newest first, 100 at a time |
+| `media://predictions{?cursor}` | A page of the caller's runs in the order they started, 100 at a time |
 | `media://prediction/{prediction_id}` | One of the caller's runs by the provider's prediction |
 | `media://prediction/{prediction_id}/result` | A succeeded run's result |
 
-A run is visible to its owner while the owner holds every data label the run carries.
+A run is its Task's: a caller sees the runs whose Tasks core's Task runtime selects
+for them as their owner, the principal who started the run on the same Gateway profile
+while they hold every data label the run carries.
 A run the reader may not see reads as missing. The prediction listing and single
 predictions accept subscriptions; the catalog, documents and results do not change.
+A run changes when its Task does, which core's Task runtime announces on Media's Task
+channel, or when its row does, which Media's own trigger announces on the `media`
+channel; the watcher listens to both.
 
 ### Prompts
 
@@ -135,9 +140,9 @@ one to the other:
 A prediction names its completion, `events` or `checks`, once the run reached the
 provider; the run's operation records the mode it was dispatched with, so a run
 resumed under another configuration keeps it. Both end at the deadline, two hours
-after dispatch by default. An expired wait never
-proves failure: a later report still settles the provider's job, and the run records
-itself unresolved.
+after dispatch by default. An expired wait never proves failure: a later report still
+settles the provider's job, and the run's Task fails as `generation_unresolved`, which
+the prediction reads as unresolved.
 
 ### Outputs
 
@@ -182,12 +187,18 @@ A failed run's Task records one of these codes beside a message that names no se
 | `generation_failed` | The provider failed, timed out, cancelled or deleted the prediction |
 | `generation_unresolved` | The provider reported no outcome before the deadline; the prediction reads as unresolved |
 | `output_not_stored` | An output could not be fetched or stored in Artifact |
-| `store_unavailable` | The installation database refused or lost a write the run needed |
+| `store_refused` | The installation database refused a write the run needed |
 | `run_error` | The run stopped on an error Media does not classify; Media's log holds the details |
 
 A run that stops on an error none of its steps handles fails under the code that
 names the cause, unless its Task parked, stopped with its process, or left the
 worker: those Tasks stay with their wait or their recovery.
+
+A prediction's status is its Task's: `queued`, then `processing` while the run works
+or waits for the provider, `storing` while Media stores the outputs, which Media names
+in the Task's status message, and `cancelling` once a cancellation is requested. It
+ends `succeeded`, `failed` with the Task's failure message, `cancelled`, or
+`unresolved` when the Task failed as `generation_unresolved`.
 
 ### Cancellation
 
@@ -218,18 +229,19 @@ registry. Probes never call the provider.
 
 | Table | Holds | Retention |
 |---|---|---|
-| `media.prediction` | One row per run: tenant, Task, owner, labels, model, the provider's prediction and status endpoint, its completion, progress, error, stored outputs and times | Until 30 days after the run ended, when the sweep deletes it |
+| `media.prediction` | One row per run, what only Media knows about it: tenant, Task, model, the provider's prediction and status endpoint, its completion, its stored outputs and when Media recorded it | From 30 days after Media recorded the run until the sweep finds its Task gone |
 
-Core's Task runtime holds the Task, its steps, its operations and their events; core's
-usage ledger holds its costs.
+Core's Task runtime holds the Task, its owner, status, failure and times, its steps,
+its operations and their events; core's usage ledger holds its costs. Media's SQL
+touches only the `media` schema and reads Tasks through the runtime's API: a single
+prediction through the caller's own Task query, and the listing as a page of the
+caller's `media.run` Tasks, which Media completes with its rows of those Tasks. No row
+copies a Task's state, so a prediction always reads as its Task stands.
 
-A run's ending follows its Task. Every read of a run joins its Task in core's
-`tasks.task`, and once the Task has ended, its status, failure message and end time
-are the run's whatever the row recorded, so a run never reads as in progress after its
-Task ended. The row keeps Media's own progress before that: queued, processing and
-storing. The hourly sweep copies the Task's ending into each row still open whose Task
-has ended, ends as unresolved a row older than the retention whose Task no longer
-exists, and then deletes rows past their retention.
+Every hour the sweep walks the rows recorded more than the retention ago, oldest first,
+and deletes those whose Task core's Task runtime no longer holds, so a row outlives its
+Task by at most one sweep and never the other way round. A Task keeps its own retention
+after it ends, which Media sets to the same 30 days.
 
 ## Authorization
 
@@ -276,8 +288,8 @@ signs the client assertions of its token exchanges.
 | Suite | Covers |
 |---|---|
 | Unit tests | Identities, resource routes, permissions, webhook signatures, the provider client's address, status-endpoint and redaction rules, the catalog's pages, cursors and input checks, the requirement table and tool annotations, prompts and configuration |
-| `tests/store.rs` | The `media` schema on PostgreSQL: run progress and its first ending, reads by owner and labels, keyset pages and their cursors, and the sweep |
-| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity; a run whose row the database refuses to update, which reads as its Task ended and which the sweep settles; an estimate from the provider's quote above the base price; a run the provider cannot price |
+| `tests/store.rs` | The `media` schema on PostgreSQL: a run's submission and outputs, reads by Task and by prediction per tenant, a repeated prediction, and the sweep's walk through runs past their retention |
+| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity, which fails the second run as `prediction_conflict`; a run whose outputs the database refuses to record, which fails as `store_refused` and reads as its Task ended; an estimate from the provider's quote above the base price; a run the provider cannot price |
 | `tests/database_conformance.rs` | Core's database rules over every statement and the schema |
 | `tests/acceptance.rs` | Ignored by default: a run through the Gateway of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run; gated by `MEDIA_PROVIDER_QUALIFICATION=1`, one billed run through the installation against the real provider, its outputs read through Artifact, its estimate and actual cost in the Gateway's cost view, and its completion matching the configuration |
 | `tests/provider_qualification.rs` | Ignored by default and gated by `MEDIA_PROVIDER_QUALIFICATION=1`: one billed generation with the real provider through the full flow, on the model with the lowest quote for its input, whose bill the quote covers |

@@ -29,10 +29,13 @@ pub struct RunRequest {
 pub enum PredictionStatus {
     /// The run waits for a worker.
     Queued,
-    /// The provider accepted the run and Media waits for its outcome.
+    /// The run works: it checks and prices its input, or waits for the provider's
+    /// outcome.
     Processing,
     /// The provider finished, and Media stores the outputs in Artifact.
     Storing,
+    /// The caller cancelled the run, and the cancellation is on its way to the provider.
+    Cancelling,
     /// Every output is stored.
     Succeeded,
     /// The provider or Media could not finish the run.
@@ -86,8 +89,8 @@ pub enum RunFailureCode {
     GenerationUnresolved,
     /// An output could not be fetched or stored in Artifact.
     OutputNotStored,
-    /// The installation database refused or lost a write the run needed.
-    StoreUnavailable,
+    /// The installation database refused a write the run needed.
+    StoreRefused,
     /// The run stopped on an error Media does not classify. Media's log holds its details.
     RunError,
 }
@@ -155,7 +158,7 @@ pub struct PredictionEntry {
     pub prediction: PredictionSummary,
 }
 
-/// A page of the caller's predictions, newest first.
+/// A page of the caller's predictions, in the order their runs started.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PredictionListing {
@@ -204,6 +207,7 @@ mod tests {
                     PredictionStatus::Queued
                         | PredictionStatus::Processing
                         | PredictionStatus::Storing
+                        | PredictionStatus::Cancelling
                 ),
                 "{status}"
             );

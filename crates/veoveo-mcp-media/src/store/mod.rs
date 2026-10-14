@@ -1,38 +1,18 @@
-//! Media's own rows: one per `run` Task, in the `media` schema. A row records the run's
-//! owner, model, provider prediction, progress and stored outputs for the resources Media
-//! serves; core's Task runtime holds the Task, its steps and its provider operations.
-//! Reads filter by owner and labels inside each statement, so a run the reader may not
-//! see reads as missing.
-//!
-//! A run's ending follows its Task. Every read joins the Task, and once the Task has
-//! ended its status, failure message and end time are the run's, whatever the row
-//! recorded, so the listing can never show a run in progress whose Task ended. The sweep
-//! copies the Task's ending into rows that missed it, which keeps their retention.
-use std::collections::BTreeSet;
-
+//! Media's own rows: one per `run` Task, in the `media` schema. A row holds what only
+//! Media knows about the run: its model, the provider's prediction and status endpoint,
+//! how the provider's outcome reaches it, its stored outputs and when Media recorded it.
+//! Core's Task runtime holds the rest, the run's owner, status, failure and times, and
+//! Media reads them through the runtime's API, so no row can disagree with its Task.
 use chrono::{DateTime, Utc};
 use sqlx::types::Json;
 use uuid::Uuid;
-use veoveo_platform_store::{
-    CursorScope, KeysetCursor, Page, PageSize, PlatformStore, PrincipalId as StoredPrincipal,
-    TenantId as StoredTenant,
-};
-use veoveo_task_runtime::TaskStatus;
-use veoveo_types::{DataLabelId, PrincipalId, TaskId, TenantId};
+use veoveo_platform_store::{PlatformStore, TenantId as StoredTenant};
+use veoveo_types::{TaskId, TenantId};
 
-use crate::contract::{
-    CompletionMode, GeneratedArtifact, ListCursor, MediaModelId, MediaPredictionId,
-    PredictionStatus, PredictionSummary, RunFailureCode,
-};
+use crate::contract::{CompletionMode, GeneratedArtifact, MediaModelId, MediaPredictionId};
 
-/// The most runs one page holds.
-pub const MAX_PREDICTIONS_PER_PAGE: u32 = 100;
-/// A page size of the prediction listing.
-pub type PredictionPageSize = PageSize<MAX_PREDICTIONS_PER_PAGE>;
-/// The most runs one sweep batch deletes.
-pub const PRUNE_BATCH: i64 = 500;
-/// The most runs one sweep batch settles.
-pub const SETTLE_BATCH: i64 = 100;
+/// The most runs one sweep batch reads.
+pub const SWEEP_BATCH: i64 = 500;
 
 /// The unique index under which a provider names each prediction once per tenant.
 const PREDICTION_INDEX: &str = "prediction_provider";
@@ -40,10 +20,8 @@ const PREDICTION_INDEX: &str = "prediction_provider";
 /// Why a store call failed.
 #[derive(Debug, thiserror::Error)]
 pub enum MediaStoreError {
-    #[error("the run names no stored tenant or principal")]
-    InvalidOwner,
-    #[error("the cursor belongs to another listing; start from the first page")]
-    StaleCursor,
+    #[error("the run names no stored tenant")]
+    InvalidTenant,
     #[error("a stored run does not decode: {0}")]
     Corrupt(&'static str),
     #[error("the provider named prediction {0}, which another run already holds")]
@@ -67,127 +45,32 @@ impl MediaStoreError {
     }
 }
 
-/// Who a run belongs to, or who reads runs: tenant, principal and data labels. A reader
-/// sees the runs it owns whose labels it holds.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RunOwner {
-    tenant: StoredTenant,
-    principal: StoredPrincipal,
-    labels: BTreeSet<DataLabelId>,
+/// The stored identity of a tenant, as the identity schema derives it.
+pub fn stored_tenant(tenant: &TenantId) -> Result<StoredTenant, MediaStoreError> {
+    veoveo_platform_store::deterministic_tenant_id(tenant.as_str())
+        .map_err(|_| MediaStoreError::InvalidTenant)
 }
 
-impl RunOwner {
-    pub fn new(
-        tenant: &TenantId,
-        principal: &PrincipalId,
-        labels: BTreeSet<DataLabelId>,
-    ) -> Result<Self, MediaStoreError> {
-        let stored_tenant = veoveo_platform_store::deterministic_tenant_id(tenant.as_str())
-            .map_err(|_| MediaStoreError::InvalidOwner)?;
-        let stored_principal =
-            veoveo_platform_store::deterministic_principal_id(tenant.as_str(), principal.as_str())
-                .map_err(|_| MediaStoreError::InvalidOwner)?;
-        Ok(Self {
-            tenant: stored_tenant,
-            principal: stored_principal,
-            labels,
-        })
-    }
-
-    pub fn tenant(&self) -> StoredTenant {
-        self.tenant
-    }
-
-    pub fn labels(&self) -> &BTreeSet<DataLabelId> {
-        &self.labels
-    }
-
-    fn label_keys(&self) -> Vec<String> {
-        self.labels.iter().map(ToString::to_string).collect()
-    }
-}
-
-/// One run as the database holds it, beside how its Task ended.
+/// One run as Media holds it.
 #[derive(Debug, Clone)]
 pub struct PredictionRow {
     pub tenant: StoredTenant,
     pub task_id: Uuid,
-    pub owner: StoredPrincipal,
-    pub data_labels: Vec<String>,
     pub model_id: String,
     pub prediction_id: Option<String>,
     pub status_url: Option<String>,
-    pub status: String,
-    pub error: Option<String>,
+    pub completion: Option<String>,
     pub outputs: Json<Vec<GeneratedArtifact>>,
     pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub completion: Option<String>,
-    /// The run's Task in core's Task runtime: its status, error code, failure message
-    /// and end time, all absent when the Task no longer exists.
-    pub task_status: Option<TaskStatus>,
-    pub task_error_code: Option<String>,
-    pub task_error: Option<String>,
-    pub task_completed_at: Option<DateTime<Utc>>,
-}
-
-/// How a run's Task ended: the run's status, its failure message and its end time.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskEnd {
-    pub status: PredictionStatus,
-    pub error: Option<String>,
-    pub completed_at: DateTime<Utc>,
-}
-
-impl TaskEnd {
-    /// The ending of a Task with `status`, or `None` while the Task has not ended. A
-    /// Task that failed for want of the provider's outcome leaves the run unresolved.
-    pub fn of(
-        status: TaskStatus,
-        error_code: Option<&str>,
-        error: Option<&str>,
-        completed_at: Option<DateTime<Utc>>,
-    ) -> Option<Self> {
-        let (status, error) = match status {
-            TaskStatus::Succeeded => (PredictionStatus::Succeeded, None),
-            TaskStatus::Cancelled => (PredictionStatus::Cancelled, None),
-            TaskStatus::Failed
-                if error_code == Some(RunFailureCode::GenerationUnresolved.as_str()) =>
-            {
-                (PredictionStatus::Unresolved, None)
-            }
-            TaskStatus::Failed => (PredictionStatus::Failed, error.and_then(bounded_error)),
-            TaskStatus::Queued
-            | TaskStatus::Running
-            | TaskStatus::Waiting
-            | TaskStatus::CancelRequested => return None,
-        };
-        Some(Self {
-            status,
-            error,
-            completed_at: completed_at?,
-        })
-    }
-
-    /// The ending this records into a run's row.
-    fn ending(&self) -> RunEnding {
-        match self.status {
-            PredictionStatus::Succeeded => RunEnding::Succeeded(Vec::new()),
-            PredictionStatus::Cancelled => RunEnding::Cancelled(Vec::new()),
-            PredictionStatus::Unresolved => RunEnding::Unresolved,
-            _ => RunEnding::Failed(
-                self.error
-                    .clone()
-                    .unwrap_or_else(|| "the run's Task failed".to_owned()),
-            ),
-        }
-    }
 }
 
 impl PredictionRow {
     pub fn task_id(&self) -> TaskId {
         TaskId::from_uuid(self.task_id)
+    }
+
+    pub fn model_id(&self) -> Result<MediaModelId, MediaStoreError> {
+        MediaModelId::parse(self.model_id.as_str()).map_err(|_| MediaStoreError::Corrupt("model"))
     }
 
     pub fn prediction_id(&self) -> Result<Option<MediaPredictionId>, MediaStoreError> {
@@ -199,110 +82,27 @@ impl PredictionRow {
             .transpose()
     }
 
-    /// How the run's Task ended, once it has.
-    pub fn task_end(&self) -> Option<TaskEnd> {
-        TaskEnd::of(
-            self.task_status?,
-            self.task_error_code.as_deref(),
-            self.task_error.as_deref(),
-            self.task_completed_at,
-        )
-    }
-
-    /// The run's status: its Task's ending once the Task has ended, and Media's own
-    /// progress before.
-    pub fn status(&self) -> Result<PredictionStatus, MediaStoreError> {
-        match self.task_end() {
-            Some(end) => Ok(end.status),
-            None => self
-                .status
-                .parse()
-                .map_err(|_| MediaStoreError::Corrupt("status")),
-        }
-    }
-
-    /// Why the run failed, when it did.
-    pub fn error(&self) -> Option<String> {
-        match self.task_end() {
-            Some(end) => end.error.or_else(|| {
-                (end.status == PredictionStatus::Failed)
-                    .then(|| self.error.clone())
-                    .flatten()
-            }),
-            None => self.error.clone(),
-        }
-    }
-
-    /// When the run ended.
-    pub fn completed_at(&self) -> Option<DateTime<Utc>> {
-        match self.task_end() {
-            Some(end) => Some(end.completed_at),
-            None => self.completed_at,
-        }
+    pub fn completion(&self) -> Result<Option<CompletionMode>, MediaStoreError> {
+        self.completion
+            .as_deref()
+            .map(|mode| {
+                mode.parse()
+                    .map_err(|_| MediaStoreError::Corrupt("completion"))
+            })
+            .transpose()
     }
 
     pub fn outputs(&self) -> &[GeneratedArtifact] {
         &self.outputs.0
     }
-
-    pub fn summary(&self) -> Result<PredictionSummary, MediaStoreError> {
-        Ok(PredictionSummary {
-            task_id: self.task_id(),
-            prediction_id: self.prediction_id()?,
-            model_id: MediaModelId::parse(self.model_id.as_str())
-                .map_err(|_| MediaStoreError::Corrupt("model"))?,
-            status: self.status()?,
-            completion: self
-                .completion
-                .as_deref()
-                .map(|mode| {
-                    mode.parse::<CompletionMode>()
-                        .map_err(|_| MediaStoreError::Corrupt("completion"))
-                })
-                .transpose()?,
-            error: self.error(),
-            output_count: u32::try_from(self.outputs.0.len())
-                .map_err(|_| MediaStoreError::Corrupt("outputs"))?,
-            created_at: self.created_at,
-            completed_at: self.completed_at(),
-        })
-    }
 }
 
-/// A page of runs and the cursor of the next one.
-pub type PredictionPage = Page<PredictionRow, ListCursor>;
-
-/// How a run ended.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RunEnding {
-    Succeeded(Vec<GeneratedArtifact>),
-    Failed(String),
-    /// Cancelled, with any outputs stored before the cancellation arrived.
-    Cancelled(Vec<GeneratedArtifact>),
-    Unresolved,
-}
-
-impl RunEnding {
-    fn status(&self) -> PredictionStatus {
-        match self {
-            Self::Succeeded(_) => PredictionStatus::Succeeded,
-            Self::Failed(_) => PredictionStatus::Failed,
-            Self::Cancelled(_) => PredictionStatus::Cancelled,
-            Self::Unresolved => PredictionStatus::Unresolved,
-        }
-    }
-}
-
-/// The longest error a run keeps, in bytes.
-const MAX_ERROR_BYTES: usize = 2048;
-
-fn bounded_error(text: &str) -> Option<String> {
-    let mut end = text.len().min(MAX_ERROR_BYTES);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    let bounded = text[..end].trim();
-    (!bounded.is_empty()).then(|| bounded.to_owned())
+/// A run past its retention, as the sweep walks them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AgedRun {
+    pub tenant: StoredTenant,
+    pub task_id: TaskId,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Media's store over its server login.
@@ -324,20 +124,18 @@ impl MediaStore {
         self.platform.pool()
     }
 
-    /// Record the owner's run of `model` as its Task starts. A repeat changes nothing.
+    /// Record a run of `model` as its Task starts. A repeat changes nothing.
     pub async fn record_run(
         &self,
-        owner: &RunOwner,
+        tenant: StoredTenant,
         task_id: TaskId,
         model: &MediaModelId,
         now: DateTime<Utc>,
     ) -> Result<(), MediaStoreError> {
         sqlx::query_file!(
             "src/store/predictions/record_run.sql",
-            owner.tenant as StoredTenant,
+            tenant as StoredTenant,
             task_id.as_uuid(),
-            owner.principal as StoredPrincipal,
-            &owner.label_keys(),
             model.as_str(),
             now,
         )
@@ -348,22 +146,20 @@ impl MediaStore {
 
     /// The provider accepted the run, under its prediction and status endpoint when it
     /// named them, and with how its outcome reaches the run once that is known.
-    pub async fn mark_processing(
+    pub async fn record_submission(
         &self,
         tenant: StoredTenant,
         task_id: TaskId,
         prediction: Option<&MediaPredictionId>,
         status_url: Option<&str>,
         completion: Option<CompletionMode>,
-        now: DateTime<Utc>,
     ) -> Result<(), MediaStoreError> {
         sqlx::query_file!(
-            "src/store/predictions/mark_processing.sql",
+            "src/store/predictions/record_submission.sql",
             tenant as StoredTenant,
             task_id.as_uuid(),
             prediction.map(MediaPredictionId::as_str),
             status_url,
-            now,
             completion.as_ref().map(CompletionMode::as_str),
         )
         .execute(self.pool())
@@ -372,20 +168,20 @@ impl MediaStore {
         Ok(())
     }
 
-    /// The provider finished the run, and Media stores its outputs.
-    pub async fn mark_storing(
+    /// The run's outputs, stored in Artifact, under the prediction that made them.
+    pub async fn record_outputs(
         &self,
         tenant: StoredTenant,
         task_id: TaskId,
         prediction: &MediaPredictionId,
-        now: DateTime<Utc>,
+        outputs: &[GeneratedArtifact],
     ) -> Result<(), MediaStoreError> {
         sqlx::query_file!(
-            "src/store/predictions/mark_storing.sql",
+            "src/store/predictions/record_outputs.sql",
             tenant as StoredTenant,
             task_id.as_uuid(),
+            Json(outputs.to_vec()) as Json<Vec<GeneratedArtifact>>,
             prediction.as_str(),
-            now,
         )
         .execute(self.pool())
         .await
@@ -393,40 +189,7 @@ impl MediaStore {
         Ok(())
     }
 
-    /// End the run, and report whether this call ended it. An ended run keeps its first
-    /// ending.
-    pub async fn finish(
-        &self,
-        tenant: StoredTenant,
-        task_id: TaskId,
-        prediction: Option<&MediaPredictionId>,
-        ending: &RunEnding,
-        now: DateTime<Utc>,
-    ) -> Result<bool, MediaStoreError> {
-        let (error, outputs) = match ending {
-            RunEnding::Succeeded(outputs) | RunEnding::Cancelled(outputs) => {
-                (None, outputs.clone())
-            }
-            RunEnding::Failed(error) => (bounded_error(error), Vec::new()),
-            RunEnding::Unresolved => (None, Vec::new()),
-        };
-        let ended = sqlx::query_file!(
-            "src/store/predictions/finish.sql",
-            tenant as StoredTenant,
-            task_id.as_uuid(),
-            ending.status().as_str(),
-            error,
-            Json(outputs) as Json<Vec<GeneratedArtifact>>,
-            prediction.map(MediaPredictionId::as_str),
-            now,
-        )
-        .execute(self.pool())
-        .await
-        .map_err(|error| MediaStoreError::of_write(error, prediction))?;
-        Ok(ended.rows_affected() == 1)
-    }
-
-    /// One run by its Task, for the worker that runs it.
+    /// One run by its Task.
     pub async fn run(
         &self,
         tenant: StoredTenant,
@@ -442,6 +205,40 @@ impl MediaStore {
         .await?)
     }
 
+    /// One run by the provider's prediction. Whether a caller may see it is its Task's
+    /// to decide.
+    pub async fn by_prediction(
+        &self,
+        tenant: StoredTenant,
+        prediction: &MediaPredictionId,
+    ) -> Result<Option<PredictionRow>, MediaStoreError> {
+        Ok(sqlx::query_file_as!(
+            PredictionRow,
+            "src/store/predictions/by_prediction.sql",
+            tenant as StoredTenant,
+            prediction.as_str(),
+        )
+        .fetch_optional(self.pool())
+        .await?)
+    }
+
+    /// The runs of `tasks`, in no particular order. A Task without a run is left out.
+    pub async fn runs(
+        &self,
+        tenant: StoredTenant,
+        tasks: &[TaskId],
+    ) -> Result<Vec<PredictionRow>, MediaStoreError> {
+        let ids: Vec<Uuid> = tasks.iter().map(|task| task.as_uuid()).collect();
+        Ok(sqlx::query_file_as!(
+            PredictionRow,
+            "src/store/predictions/by_tasks.sql",
+            tenant as StoredTenant,
+            &ids,
+        )
+        .fetch_all(self.pool())
+        .await?)
+    }
+
     /// The status endpoint the provider named for a run's prediction, by its Task.
     pub async fn status_url(&self, task_id: TaskId) -> Result<Option<String>, MediaStoreError> {
         Ok(
@@ -452,130 +249,45 @@ impl MediaStore {
         )
     }
 
-    /// One prediction the reader may see, by the provider's identity.
-    pub async fn prediction(
+    /// One batch of runs recorded before `cutoff`, across tenants, oldest first, after
+    /// `after`.
+    pub async fn past_retention(
         &self,
-        reader: &RunOwner,
-        prediction: &MediaPredictionId,
-    ) -> Result<Option<PredictionRow>, MediaStoreError> {
-        Ok(sqlx::query_file_as!(
-            PredictionRow,
-            "src/store/predictions/visible.sql",
-            reader.tenant as StoredTenant,
-            prediction.as_str(),
-            reader.principal as StoredPrincipal,
-            &reader.label_keys(),
+        cutoff: DateTime<Utc>,
+        after: Option<&AgedRun>,
+    ) -> Result<Vec<AgedRun>, MediaStoreError> {
+        let rows = sqlx::query_file!(
+            "src/store/predictions/past_retention.sql",
+            cutoff,
+            after.map(|run| run.created_at),
+            after.map(|run| run.task_id.as_uuid()),
+            SWEEP_BATCH,
         )
-        .fetch_optional(self.pool())
-        .await?)
-    }
-
-    /// One page of the reader's runs, newest first.
-    pub async fn predictions_page(
-        &self,
-        reader: &RunOwner,
-        cursor: Option<&ListCursor>,
-        size: PredictionPageSize,
-    ) -> Result<PredictionPage, MediaStoreError> {
-        let scope = CursorScope::new("media.predictions", reader.tenant, &reader.principal)
-            .map_err(|_| MediaStoreError::StaleCursor)?;
-        let after: Option<KeysetCursor<Uuid>> = cursor
-            .map(|wire| scope.parse(wire.as_str()))
-            .transpose()
-            .map_err(|_| MediaStoreError::StaleCursor)?;
-        let labels = reader.label_keys();
-        let limit = size.fetch_limit();
-        let rows = match after {
-            None => {
-                sqlx::query_file_as!(
-                    PredictionRow,
-                    "src/store/predictions/page_first.sql",
-                    reader.tenant as StoredTenant,
-                    reader.principal as StoredPrincipal,
-                    &labels,
-                    limit,
-                )
-                .fetch_all(self.pool())
-                .await?
-            }
-            Some(after) => {
-                sqlx::query_file_as!(
-                    PredictionRow,
-                    "src/store/predictions/page_next.sql",
-                    reader.tenant as StoredTenant,
-                    reader.principal as StoredPrincipal,
-                    &labels,
-                    *after.position(),
-                    limit,
-                )
-                .fetch_all(self.pool())
-                .await?
-            }
-        };
-        size.page(rows, |last| last.task_id)
-            .try_map_next(|position| {
-                let cursor = scope
-                    .cursor(position)
-                    .map_err(|_| MediaStoreError::StaleCursor)?;
-                ListCursor::parse(cursor.as_str()).map_err(|_| MediaStoreError::StaleCursor)
+        .fetch_all(self.pool())
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| AgedRun {
+                tenant: row.tenant,
+                task_id: TaskId::from_uuid(row.task_id),
+                created_at: row.created_at,
             })
+            .collect())
     }
 
-    /// Settle one batch of runs, across tenants, that are still open in Media although
-    /// their Task has ended: each takes its Task's ending and end time. A run created
-    /// before `cutoff` whose Task no longer exists ends unresolved now. Returns how many
-    /// runs the batch settled.
-    pub async fn settle(&self, cutoff: DateTime<Utc>) -> Result<u64, MediaStoreError> {
-        let due = sqlx::query_file!("src/store/predictions/settle_due.sql", cutoff, SETTLE_BATCH)
-            .fetch_all(self.pool())
-            .await?;
-        let mut settled = 0;
-        for run in due {
-            let task = TaskId::from_uuid(run.task_id);
-            let end = match run.task_status {
-                Some(status) => TaskEnd::of(
-                    status,
-                    run.task_error_code.as_deref(),
-                    run.task_error.as_deref(),
-                    run.task_completed_at,
-                ),
-                None => Some(TaskEnd {
-                    status: PredictionStatus::Unresolved,
-                    error: None,
-                    completed_at: Utc::now(),
-                }),
-            };
-            if let Some(end) = end
-                && self
-                    .finish(run.tenant, task, None, &end.ending(), end.completed_at)
-                    .await?
-            {
-                settled += 1;
-            }
-        }
-        Ok(settled)
-    }
-
-    /// Delete one batch of runs that ended before `cutoff`, across tenants.
-    pub async fn prune(&self, cutoff: DateTime<Utc>) -> Result<u64, MediaStoreError> {
-        let deleted = sqlx::query_file!("src/store/predictions/prune.sql", cutoff, PRUNE_BATCH)
-            .execute(self.pool())
-            .await?;
-        Ok(deleted.rows_affected())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn errors_are_bounded_at_a_character_boundary() {
-        assert_eq!(bounded_error("  "), None);
-        assert_eq!(bounded_error(" boom "), Some("boom".into()));
-        let long = "é".repeat(MAX_ERROR_BYTES);
-        let bounded = bounded_error(&long).unwrap();
-        assert!(bounded.len() <= MAX_ERROR_BYTES);
-        assert!(bounded.chars().all(|c| c == 'é'));
+    /// Delete one run, which the sweep found without a Task.
+    pub async fn delete_run(
+        &self,
+        tenant: StoredTenant,
+        task_id: TaskId,
+    ) -> Result<bool, MediaStoreError> {
+        let deleted = sqlx::query_file!(
+            "src/store/predictions/delete_run.sql",
+            tenant as StoredTenant,
+            task_id.as_uuid(),
+        )
+        .execute(self.pool())
+        .await?;
+        Ok(deleted.rows_affected() == 1)
     }
 }

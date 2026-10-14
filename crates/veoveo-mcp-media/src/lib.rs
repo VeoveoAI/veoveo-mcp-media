@@ -14,6 +14,8 @@ pub mod fake;
 #[cfg(feature = "server")]
 pub mod mcp;
 #[cfg(feature = "server")]
+pub mod predictions;
+#[cfg(feature = "server")]
 pub mod provider;
 #[cfg(feature = "server")]
 pub mod run;

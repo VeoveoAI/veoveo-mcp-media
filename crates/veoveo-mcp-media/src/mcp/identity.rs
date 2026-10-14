@@ -1,23 +1,21 @@
 //! The caller facts Media decides on, taken from the identity the Gateway forwards: the
-//! run owner its reads filter by, and the Task owner a run starts for.
+//! Task owner a run starts for and every read of the caller's runs selects by, and the
+//! stored tenant of Media's rows.
 use rmcp::ErrorData as McpError;
+use veoveo_platform_store::TenantId as StoredTenant;
 use veoveo_sdk_rust::GatewayInternalIdentity;
 use veoveo_task_runtime::{TaskOwner, TaskSurface};
 
-use crate::store::RunOwner;
-
-/// The reader of runs: the caller's tenant, principal and data labels.
-pub fn reader(identity: &GatewayInternalIdentity) -> Result<RunOwner, McpError> {
-    RunOwner::new(
-        &identity.authority.tenant,
-        &identity.actor.id,
-        identity.actor.data_labels.clone(),
-    )
-    .map_err(|_| McpError::invalid_request("the forwarded identity names no stored tenant", None))
+/// The stored tenant of the caller's runs.
+pub fn tenant(identity: &GatewayInternalIdentity) -> Result<StoredTenant, McpError> {
+    crate::store::stored_tenant(&identity.authority.tenant).map_err(|_| {
+        McpError::invalid_request("the forwarded identity names no stored tenant", None)
+    })
 }
 
-/// The owner of a Task the caller's call starts: its principal, authority and labels on
-/// the Gateway profile the call arrived through.
+/// The owner of a Task the caller's call starts, and the selection of the caller's own
+/// Tasks: its principal, authority and labels on the Gateway profile the call arrived
+/// through.
 pub fn task_owner(identity: &GatewayInternalIdentity) -> Result<TaskOwner, McpError> {
     let actor = &identity.actor;
     Ok(TaskOwner {
