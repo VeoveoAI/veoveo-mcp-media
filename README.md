@@ -15,7 +15,6 @@ records the run's cost in core's usage ledger. The design is
 | `crates/veoveo-mcp-media/migrations` | The `media` schema, applied in Media's own PostgreSQL schema at startup |
 | `.sqlx/` | sqlx's checked metadata for every query the workspace compiles, Artifact's included |
 | `Dockerfile` | The `dev` environment, the `check` gate, the release `build` and the `runtime` image |
-| `openshell/policy.yaml` | The OpenShell policy for the development environment |
 
 ## Using The Contract
 
@@ -64,19 +63,20 @@ reaches the real provider.
 
 ## Development Environment
 
-Build the `dev` image on the host and create an OpenShell sandbox from it with the
-installation's `vv-registration` provider attached:
-
 ```sh
 docker build --target dev -t veoveo-mcp-media:dev .
-openshell sandbox create --name vv-mcp-media --from veoveo-mcp-media:dev \
-  --policy openshell/policy.yaml --provider vv-registration --detach -- sleep infinity
 ```
 
-The policy lets Media reach the Gateway at `host.openshell.internal:8080`, the
-installation's PostgreSQL server at port 5432 and its object store at port 9000, where
-Media sends each output's bytes to the URLs Artifact signs. The fake provider runs in the
-same environment on loopback and needs no policy entry.
+A local installation from
+[veoveo-template-installation](https://github.com/VeoveoAI/veoveo-template-installation)
+runs this image, under its own layer, as the Compose service `vv-mcp-media`, which
+works in the installation's Lore repository at `/sandbox/src`. The environment reaches
+the Gateway at `vv-gateway.internal:8080`, PostgreSQL at `vv-postgres.internal:5432` and
+the object store at `vv-seaweedfs.internal:9000`, where Media sends each output's bytes
+to the URLs Artifact signs. It also joins the network where the installation's edge
+answers as `media-provider.internal` for the real provider. The fake provider runs in
+the same environment on loopback. Run the commands below from the installation's
+directory.
 
 ### Running Media in the environment
 
@@ -85,39 +85,32 @@ in-process, so the installation keeps both provider values in an owner-only file
 `/sandbox/state/media.env`:
 
 ```sh
-openshell sandbox exec vv-mcp-media -- bash -lc 'mkdir -p /sandbox/state && umask 077 \
+docker compose exec vv-mcp-media bash -c 'mkdir -p /sandbox/state && umask 077 \
   && printf "MEDIA_PROVIDER_API_KEY=fake\nMEDIA_PROVIDER_WEBHOOK_SECRET=whsec_%s\n" \
        "$(head -c 24 /dev/urandom | od -An -tx1 | tr -d " \n")" > /sandbox/state/media.env'
 ```
 
-OpenShell pins every policy-listed executable path to the SHA-256 it first observes, so
-Media and the fake provider run from content-addressed copies under `/sandbox/run`.
 Served binaries build into their own target directory, `/sandbox/target-serve`, apart
 from `target/`, where the gate and acceptance builds enable test-only dependency
-features. Each binary builds alone, right before it is installed: the fake provider with
-the `testing` feature it requires, Media without it, so Media never serves a test build.
+features. Each binary builds alone, right before it starts: the fake provider with the
+`testing` feature it requires, Media without it, so Media never serves a test build.
 Start the fake provider in one terminal and Media in another:
 
 ```sh
-openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
+docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
   && cargo build --locked --target-dir /sandbox/target-serve --features testing \
        --bin veoveo-mcp-media-fake-provider \
-  && fake=/sandbox/run/veoveo-mcp-media-fake-provider-$(sha256sum /sandbox/target-serve/debug/veoveo-mcp-media-fake-provider | cut -c1-16) \
-  && install -D -m 0755 /sandbox/target-serve/debug/veoveo-mcp-media-fake-provider "$fake" \
   && set -a && . /sandbox/state/media.env && set +a \
-  && setsid "$fake" --listen 127.0.0.1:8803'
-openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
+  && exec /sandbox/target-serve/debug/veoveo-mcp-media-fake-provider --listen 127.0.0.1:8803'
+docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
   && cargo build --locked --target-dir /sandbox/target-serve --bin veoveo-mcp-media \
-  && bin=/sandbox/run/veoveo-mcp-media-$(sha256sum /sandbox/target-serve/debug/veoveo-mcp-media | cut -c1-16) \
-  && install -D -m 0755 /sandbox/target-serve/debug/veoveo-mcp-media "$bin" \
   && set -a && . /sandbox/state/media.env && set +a \
-  && VEOVEO_PUBLIC_BASE_URL=http://host.openshell.internal:8802 \
-     VEOVEO_GATEWAY_ISSUER=http://host.openshell.internal:8080 \
+  && VEOVEO_PUBLIC_BASE_URL=http://vv-mcp-media.internal:8802 \
+     VEOVEO_GATEWAY_ISSUER=http://vv-gateway.internal:8080 \
      VEOVEO_KEY_DIRECTORY=/sandbox/media/keys \
      VEOVEO_ALLOW_LOOPBACK_HOSTS=true \
      MEDIA_PROVIDER_URL=http://127.0.0.1:8803 \
-     "$bin"'
-openshell forward start 8802 vv-mcp-media -d
+     exec /sandbox/target-serve/debug/veoveo-mcp-media'
 ```
 
 Without a public origin, runs complete through status checks of the fake. An
@@ -126,7 +119,7 @@ installation whose tunnel carries its public origin sets `VEOVEO_PUBLIC_ORIGIN` 
 origin's host, and the provider posts each outcome to
 `https://veoveo.example.com/media/operations/…`.
 Media registers before it listens, and the Gateway reaches it as
-`http://host.openshell.internal:8802/media/mcp`. Media removes its registration when it
+`http://vv-mcp-media.internal:8802/media/mcp`. Media removes its registration when it
 receives SIGTERM or Ctrl-C.
 
 ## Acceptance
@@ -139,17 +132,13 @@ and is refused `run`, whose permission carries the `billed` risk.
 
 The tests are ignored by default and compare the stored bytes with the fake provider's,
 so they build with the `testing` feature. With the installation running and the callers'
-keys copied to `/sandbox/acceptance`, run them from a fresh nextest archive extraction:
+keys copied to `/sandbox/acceptance`, run them:
 
 ```sh
-openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
-  && cargo nextest archive --features testing --test acceptance \
-       --archive-file /sandbox/run/acceptance.tar.zst \
-  && run=/sandbox/run/acceptance-$(date +%s%N) && mkdir -p "$run" \
-  && VEOVEO_ACCEPTANCE_GATEWAY=http://host.openshell.internal:8080 \
+docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
+  && VEOVEO_ACCEPTANCE_GATEWAY=http://vv-gateway.internal:8080 \
      VEOVEO_ACCEPTANCE_KEY_DIRECTORY=/sandbox/acceptance \
-     cargo nextest run --archive-file /sandbox/run/acceptance.tar.zst \
-       --workspace-remap /sandbox/src --extract-to "$run" --run-ignored only \
+     cargo nextest run --features testing --test acceptance --run-ignored only \
        -E "not test(real_provider)"'
 ```
 
@@ -166,16 +155,12 @@ Configure Media for the real provider first, as the installation's README descri
 and name the model to run and the configured completion:
 
 ```sh
-openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
-  && cargo nextest archive --features testing --test acceptance \
-       --archive-file /sandbox/run/acceptance.tar.zst \
-  && run=/sandbox/run/acceptance-$(date +%s%N) && mkdir -p "$run" \
+docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
   && MEDIA_PROVIDER_QUALIFICATION=1 MEDIA_QUALIFICATION_MODEL=<model> \
      MEDIA_QUALIFICATION_COMPLETION=<events or checks> \
-     VEOVEO_ACCEPTANCE_GATEWAY=http://host.openshell.internal:8080 \
+     VEOVEO_ACCEPTANCE_GATEWAY=http://vv-gateway.internal:8080 \
      VEOVEO_ACCEPTANCE_KEY_DIRECTORY=/sandbox/acceptance \
-     cargo nextest run --archive-file /sandbox/run/acceptance.tar.zst \
-       --workspace-remap /sandbox/src --extract-to "$run" --run-ignored only \
+     cargo nextest run --features testing --test acceptance --run-ignored only \
        -E "test(real_provider)" --no-capture'
 ```
 
@@ -196,48 +181,24 @@ short prompt unless `MEDIA_QUALIFICATION_INPUT` holds the model's input as JSON.
 price leaves out what the input's defaults add, so only a quote ranks the models. The
 test checks that the quote, the run's estimate, covers the bill.
 
-Inside the Media environment, the API key reaches the test as an OpenShell placeholder
-that resolves only on requests to the provider. Create a provider whose credential is
-`MEDIA_PROVIDER_API_KEY`, attach it to the environment, and add a policy entry for the
-provider's API host and the hosts its outputs come from, the API host with the
-provider's credential binding:
-
-```yaml
-  media_provider:
-    endpoints:
-      - host: <provider API host>
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        rules:
-          - allow: {method: GET, path: "/api/v3/**"}
-          - allow: {method: POST, path: "/api/v3/**"}
-        credential_binding:
-          provider: <the provider's OpenShell name>
-      - host: <provider output host>
-        port: 443
-    binaries:
-      - path: /sandbox/run/qualification-*/**
-```
-
-Then run the test from a fresh nextest archive extraction:
+Inside the Media environment, the test sends the API key's placeholder to the
+installation's edge at `media-provider.internal`, which adds the key, and fetches outputs
+through the edge's proxy from the hosts `.env` names. Set the provider up in the edge as
+the installation's README describes, then run the test with the path of the provider's
+API URL after the edge's name:
 
 ```sh
-openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
-  && cargo nextest archive --all-features --test provider_qualification \
-       --archive-file /sandbox/run/qualification.tar.zst \
-  && run=/sandbox/run/qualification-$(date +%s%N) && mkdir -p "$run" \
-  && MEDIA_PROVIDER_QUALIFICATION=1 MEDIA_PROVIDER_URL=https://<provider API host> \
-     MEDIA_OUTPUT_HOSTS=<provider output host> \
-     cargo nextest run --archive-file /sandbox/run/qualification.tar.zst \
-       --workspace-remap /sandbox/src --extract-to "$run" --run-ignored only --no-capture'
+docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
+  && MEDIA_PROVIDER_QUALIFICATION=1 MEDIA_PROVIDER_URL=https://media-provider.internal<API path> \
+     MEDIA_PROVIDER_API_KEY=replaced-by-the-edge MEDIA_OUTPUT_HOSTS=<provider output host> \
+     cargo nextest run --all-features --test provider_qualification --run-ignored only --no-capture'
 ```
 
 Without a public callback, the run completes through status checks. To cover webhook
 delivery too, the test listens for forwarded webhooks on
-`MEDIA_QUALIFICATION_CALLBACK_LISTEN` (`127.0.0.1:8899` by default). Forward that port
-to the host with `openshell forward start 8899 vv-mcp-media -d`, open a temporary public
-tunnel on the host to `http://127.0.0.1:8899`, and set
+`MEDIA_QUALIFICATION_CALLBACK_LISTEN` (`127.0.0.1:8899` by default). Set it to
+`0.0.0.0:8899`, open a temporary public tunnel to `http://vv-mcp-media.internal:8899` from
+a container on the installation's networks, and set
 `MEDIA_QUALIFICATION_PUBLIC_ORIGIN` to the tunnel's origin, which stands in for the
 installation's public origin such as `https://veoveo.example.com`, and
 `MEDIA_PROVIDER_WEBHOOK_SECRET` to the account's webhook secret, from an owner-only file

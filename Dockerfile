@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.27@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
-# Stages: dev is the OpenShell environment, check is the single gate, build compiles the
+# Stages: dev is the development environment, check is the single gate, build compiles the
 # release binary, and runtime is the deployable image.
 
 ARG COMPONENT=veoveo-mcp-media

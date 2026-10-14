@@ -32,7 +32,7 @@ pub(super) struct Args {
     /// The Gateway's RFC 8414 issuer; registration discovers its endpoint from there.
     #[arg(long, env = "VEOVEO_GATEWAY_ISSUER")]
     pub gateway_issuer: Url,
-    /// The installation's registration secret, or the placeholder OpenShell substitutes.
+    /// The installation's registration secret, or the placeholder the installation's edge replaces.
     #[arg(
         long,
         env = "VEOVEO_REGISTRATION_SECRET",
@@ -145,7 +145,7 @@ fn parse_allowed_host(value: &str) -> Result<String, String> {
     let value = value.trim();
     parse_allowed_host_authority(value)
         .map(|_| value.to_owned())
-        .ok_or_else(|| "expected a host authority such as host.openshell.internal:8802".to_owned())
+        .ok_or_else(|| "expected a host authority such as vv-mcp-media.internal:8802".to_owned())
 }
 
 #[cfg(test)]
@@ -156,9 +156,9 @@ mod tests {
         let mut argv = vec![
             "veoveo-mcp-media",
             "--public-base-url",
-            "http://host.openshell.internal:8802",
+            "http://vv-mcp-media.internal:8802",
             "--gateway-issuer",
-            "http://host.openshell.internal:8080",
+            "http://vv-gateway.internal:8080",
             "--registration-secret",
             "placeholder",
             "--provider-api-key",
@@ -201,7 +201,7 @@ mod tests {
         let deployment = webhooks.public_deployment().unwrap();
         assert_eq!(
             veoveo_sdk_rust::public_allowed_hosts(&deployment, false),
-            vec!["host.openshell.internal:8802", "veoveo.example.com"]
+            vec!["vv-mcp-media.internal:8802", "veoveo.example.com"]
         );
         assert_eq!(
             webhooks.run_settings(&deployment).unwrap().completion,
