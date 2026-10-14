@@ -158,7 +158,7 @@ pub struct PredictionEntry {
     pub prediction: PredictionSummary,
 }
 
-/// A page of the caller's predictions, in the order their runs started.
+/// A page of the caller's predictions, newest first.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PredictionListing {

@@ -32,11 +32,11 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
   closed enum at startup through `UsageLedger::declare`, each with its FOCUS service
   category and unit, records an estimate with `ctx.usage()` before the work and the
   actual usage when the provider reports it. Core's
-  [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/platform/usage/DESIGN.md) holds the records.
+  [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/286e2fcc8f2f36c44e1ce17e171289cac0f8d8cb/platform/usage/DESIGN.md) holds the records.
 - Audit classes are the server's own, `<slug>.<action>`, each mapped to an OCSF class.
   A record's reason is a code the server defines and its target a URI in the server's
   own scheme, as core's
-  [audit record contract](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/platform/audit/contract/DESIGN.md#outcome-and-reason)
+  [audit record contract](https://github.com/VeoveoAI/veoveo-core/blob/286e2fcc8f2f36c44e1ce17e171289cac0f8d8cb/platform/audit/contract/DESIGN.md#outcome-and-reason)
   describes.
 - The server owns one PostgreSQL schema named after its slug and applies the crate's
   `migrations/` there at startup. Never edit an applied migration; add a new one.
@@ -50,7 +50,7 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
   `.cargo/config.toml` sets `SQLX_OFFLINE`. After changing a query or a migration,
   regenerate the metadata from an empty target directory.
 - Statements and tables follow the server schema rules of veoveo-core's
-  [database design](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/docs/DATABASE.md),
+  [database design](https://github.com/VeoveoAI/veoveo-core/blob/286e2fcc8f2f36c44e1ce17e171289cac0f8d8cb/docs/DATABASE.md),
   which `crates/veoveo-mcp-media/tests/database_conformance.rs` checks. A statement binds its tenant, bounds its
   rows and reaches them through an index in a generic plan. A table has a primary key,
   an index whose leading columns are each foreign key's, and a

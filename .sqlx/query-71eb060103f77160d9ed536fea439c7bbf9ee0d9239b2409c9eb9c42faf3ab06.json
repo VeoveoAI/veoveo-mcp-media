@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Whether the instance's row is still there, which a reaper deletes once it finds the lock\n-- free.\nSELECT EXISTS (SELECT FROM kernel.instance WHERE id = $1) AS \"present!\"\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "71eb060103f77160d9ed536fea439c7bbf9ee0d9239b2409c9eb9c42faf3ab06"
+}

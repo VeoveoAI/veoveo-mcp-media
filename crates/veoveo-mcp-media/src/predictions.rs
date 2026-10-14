@@ -6,10 +6,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
 use veoveo_platform_store::{CursorScope, KeysetCursor};
 use veoveo_task_runtime::{
-    TaskError, TaskOwner, TaskPageCursor, TaskRuntime, TaskSnapshot, TaskStatus,
+    TaskError, TaskOwner, TaskPageCursor, TaskPageOrder, TaskRuntime, TaskSnapshot, TaskStatus,
 };
 use veoveo_types::TaskId;
 
@@ -120,9 +119,6 @@ pub struct PredictionPage {
     pub next: Option<ListCursor>,
 }
 
-/// Where a listing page ends: its last Task's creation time and identity.
-type Position = (DateTime<Utc>, Uuid);
-
 /// Media's predictions over core's Task runtime and Media's store.
 #[derive(Clone)]
 pub struct Predictions {
@@ -178,8 +174,7 @@ impl Predictions {
         Ok(Some(Prediction { task, row }))
     }
 
-    /// One page of `owner`'s predictions in the order core's Task runtime pages a
-    /// caller's Tasks, after `cursor`.
+    /// One page of `owner`'s predictions, newest first, after `cursor`.
     pub async fn page(
         &self,
         owner: &TaskOwner,
@@ -194,14 +189,8 @@ impl Predictions {
         let after = cursor
             .map(|wire| {
                 scope
-                    .parse::<Position>(wire.as_str())
-                    .map(|cursor: KeysetCursor<Position>| {
-                        let (created_at, task_id) = *cursor.position();
-                        TaskPageCursor {
-                            created_at,
-                            task_id: TaskId::from_uuid(task_id),
-                        }
-                    })
+                    .parse::<TaskPageCursor>(wire.as_str())
+                    .map(|cursor: KeysetCursor<TaskPageCursor>| cursor.position().clone())
             })
             .transpose()
             .map_err(|_| PredictionError::StaleCursor)?;
@@ -209,8 +198,16 @@ impl Predictions {
             .tasks
             .for_owner(owner)
             .of_type(RUN)
-            .page(after.as_ref(), PREDICTIONS_PER_PAGE)
-            .await?;
+            .page(
+                TaskPageOrder::NewestFirst,
+                after.as_ref(),
+                PREDICTIONS_PER_PAGE,
+            )
+            .await
+            .map_err(|error| match error {
+                TaskError::PageOrderMismatch { .. } => PredictionError::StaleCursor,
+                error => PredictionError::Tasks(error),
+            })?;
         let ids: Vec<TaskId> = page.items.iter().map(|task| task.task_id).collect();
         let mut rows: BTreeMap<TaskId, PredictionRow> = self
             .store
@@ -231,7 +228,7 @@ impl Predictions {
             .next_cursor
             .map(|next| {
                 let cursor = scope
-                    .cursor::<Position>((next.created_at, next.task_id.as_uuid()))
+                    .cursor(next)
                     .map_err(|_| PredictionError::StaleCursor)?;
                 ListCursor::parse(cursor.as_str()).map_err(|_| PredictionError::StaleCursor)
             })
@@ -263,15 +260,14 @@ impl Predictions {
         }
     }
 
-    /// Which of `tasks` core's Task runtime still holds for this server. The runtime
-    /// answers one Task at a time until its batch read arrives.
+    /// Which of `tasks` core's Task runtime still holds for this server, in one read.
     async fn held(&self, tasks: &[TaskId]) -> Result<BTreeSet<TaskId>, PredictionError> {
-        let mut held = BTreeSet::new();
-        for task in tasks {
-            if self.tasks.get(*task).await?.is_some() {
-                held.insert(*task);
-            }
-        }
-        Ok(held)
+        Ok(self
+            .tasks
+            .get_many(tasks)
+            .await?
+            .into_iter()
+            .map(|task| task.task_id)
+            .collect())
     }
 }

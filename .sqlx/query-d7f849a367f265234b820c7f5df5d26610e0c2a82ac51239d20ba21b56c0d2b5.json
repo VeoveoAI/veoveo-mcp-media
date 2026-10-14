@@ -1,0 +1,438 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\n-- A worker gives up its claim without an outcome. Clearing the owner fires the recovery\n-- trigger, which moves the Task on as the end of its instance would.\nUPDATE tasks.task\nSET owner_instance = NULL\nWHERE id = $1 AND server = $2 AND owner_instance = $3\nRETURNING\n    id,\n    server,\n    tenant,\n    owner_tenant,\n    owner_principal,\n    owner_kind AS \"owner_kind: PrincipalKind\",\n    owner_issuer,\n    owner_subject,\n    surface,\n    data_labels,\n    work_context,\n    authority AS \"authority: Json<InvocationAuthority>\",\n    task_type,\n    recovery_class AS \"recovery_class: RecoveryClass\",\n    input,\n    idempotency_key,\n    ttl_ms,\n    poll_interval_ms,\n    status AS \"status: TaskStatus\",\n    status_message,\n    progress,\n    result,\n    result_uri,\n    error_code,\n    error_message,\n    error_details,\n    owner_instance AS \"owner_instance: InstanceId\",\n    revision,\n    retention_pins,\n    created_at,\n    updated_at,\n    started_at,\n    cancel_requested_at,\n    completed_at,\n    retention_expires_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "server",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "server"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "tenant"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "owner_tenant",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "owner_tenant"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "owner_principal",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "owner_principal"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "owner_kind: PrincipalKind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "owner_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "owner_issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "owner_issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "owner_subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "owner_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "surface",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "surface"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "data_labels",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "data_labels"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "work_context",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "work_context"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "authority: Json<InvocationAuthority>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "authority"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "task_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "task_type"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "recovery_class: RecoveryClass",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "recovery_class"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "input",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "input"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "idempotency_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "idempotency_key"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "ttl_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "ttl_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "poll_interval_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "poll_interval_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "status: TaskStatus",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "status_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "status_message"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "progress",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "progress"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "result",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "result"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "result_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "result_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "error_code",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "error_code"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "error_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "error_message"
+          }
+        }
+      },
+      {
+        "ordinal": 25,
+        "name": "error_details",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "error_details"
+          }
+        }
+      },
+      {
+        "ordinal": 26,
+        "name": "owner_instance: InstanceId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "owner_instance"
+          }
+        }
+      },
+      {
+        "ordinal": 27,
+        "name": "revision",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "ordinal": 28,
+        "name": "retention_pins",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "retention_pins"
+          }
+        }
+      },
+      {
+        "ordinal": 29,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 30,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 31,
+        "name": "started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "ordinal": 32,
+        "name": "cancel_requested_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "cancel_requested_at"
+          }
+        }
+      },
+      {
+        "ordinal": 33,
+        "name": "completed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "completed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 34,
+        "name": "retention_expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "retention_expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "d7f849a367f265234b820c7f5df5d26610e0c2a82ac51239d20ba21b56c0d2b5"
+}

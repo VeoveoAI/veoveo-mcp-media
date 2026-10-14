@@ -28,14 +28,14 @@ port         8802
 
 | Standard or protocol | Implemented profile |
 |---|---|
-| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-sdk-rust` 67314b4 implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
+| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-sdk-rust` 02930e5 implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
 | [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12/) | Tool inputs and results and resource contents. A run's input is checked with jsonschema 0.58.6 against the JSON Schema the provider publishes for the model; that schema's shape is the provider's. |
 | [URI Template RFC 6570](https://www.rfc-editor.org/rfc/rfc6570) | Discovery declares simple variables, one `{+model_id}` reserved expansion for a model's `/`-separated components, and collection pages that continue through a `cursor` query parameter. |
 | [JWT access tokens RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html) and [Token Exchange RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | The Gateway forwards each request with an access token naming the caller. A run calls Artifact through the Gateway with a token the SDK obtains by exchange for the run's Task, narrowed to Media's declared uses of Artifact that the caller holds. |
 | [HMAC-SHA256, RFC 2104](https://www.rfc-editor.org/rfc/rfc2104) | The provider signs each webhook over `{webhook-id}.{webhook-timestamp}.{body}` with the account's webhook secret; the `webhook-signature` header carries `v3,<hex>` signatures. Media refuses a signing time more than 300 seconds from its clock. |
-| [FOCUS 1.4](https://focus.finops.org/focus-specification/) usage records in core's [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/platform/usage/DESIGN.md) | One usage kind, `media.generation`, in the FOCUS service category "AI and Machine Learning" with the unit `Requests`, and amounts in [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) US dollars. |
+| [FOCUS 1.4](https://focus.finops.org/focus-specification/) usage records in core's [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/286e2fcc8f2f36c44e1ce17e171289cac0f8d8cb/platform/usage/DESIGN.md) | One usage kind, `media.generation`, in the FOCUS service category "AI and Machine Learning" with the unit `Requests`, and amounts in [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) US dollars. |
 | [Veoveo server registration](https://github.com/VeoveoAI/veoveo-sdk-rust) | Media registers through RFC 7591, removes its registration through RFC 7592, and declares its permissions and its uses of Artifact in `ai.veoveo/authorization`. |
-| [PostgreSQL 18](https://www.postgresql.org/docs/18/) | Server 18.6 through sqlx 0.9.0, under the [installation database design](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/docs/DATABASE.md) of `veoveo-core`. Media owns the schema `media`, applies its own migrations and runs every statement from a `.sql` file that sqlx checks. Row triggers publish changes on the `media` channel. |
+| [PostgreSQL 18](https://www.postgresql.org/docs/18/) | Server 18.6 through sqlx 0.9.0, under the [installation database design](https://github.com/VeoveoAI/veoveo-core/blob/286e2fcc8f2f36c44e1ce17e171289cac0f8d8cb/docs/DATABASE.md) of `veoveo-core`. Media owns the schema `media`, applies its own migrations and runs every statement from a `.sql` file that sqlx checks. Row triggers publish changes on the `media` channel. |
 | The provider's HTTP API | The subset Media calls: the model registry, a price quote for a model and an input, a submission with an optional webhook, a prediction's status endpoint, a billing search and a prediction's deletion. Every response is wrapped in `{code, message, data}`. |
 
 ## Domain Contract
@@ -88,7 +88,7 @@ a bad request fails at once and costs nothing.
 | `media://docs`, `media://docs/{doc_id}`, `media://contract` | The embedded documents and the contract declaration |
 | `media://models{?query,type,limit,cursor}` | A catalog page of 20 models by default and at most 100, in model identity order |
 | `media://model/{+model_id}` | One model and the JSON Schema of its input |
-| `media://predictions{?cursor}` | A page of the caller's runs in the order they started, 100 at a time |
+| `media://predictions{?cursor}` | A page of the caller's runs, newest first, 100 at a time |
 | `media://prediction/{prediction_id}` | One of the caller's runs by the provider's prediction |
 | `media://prediction/{prediction_id}/result` | A succeeded run's result |
 
@@ -234,13 +234,14 @@ registry. Probes never call the provider.
 Core's Task runtime holds the Task, its owner, status, failure and times, its steps,
 its operations and their events; core's usage ledger holds its costs. Media's SQL
 touches only the `media` schema and reads Tasks through the runtime's API: a single
-prediction through the caller's own Task query, and the listing as a page of the
-caller's `media.run` Tasks, which Media completes with its rows of those Tasks. No row
+prediction through the caller's own Task query, and the listing as a newest-first page
+of the caller's `media.run` Tasks, which Media completes with its rows of those Tasks. No row
 copies a Task's state, so a prediction always reads as its Task stands.
 
 Every hour the sweep walks the rows recorded more than the retention ago, oldest first,
-and deletes those whose Task core's Task runtime no longer holds, so a row outlives its
-Task by at most one sweep and never the other way round. A Task keeps its own retention
+reads each batch's Tasks in one call to the runtime, and deletes the rows whose Task
+the runtime no longer holds, so a row outlives its Task by at most one sweep and never
+the other way round. A Task keeps its own retention
 after it ends, which Media sets to the same 30 days.
 
 ## Authorization
@@ -289,7 +290,7 @@ signs the client assertions of its token exchanges.
 |---|---|
 | Unit tests | Identities, resource routes, permissions, webhook signatures, the provider client's address, status-endpoint and redaction rules, the catalog's pages, cursors and input checks, the requirement table and tool annotations, prompts and configuration |
 | `tests/store.rs` | The `media` schema on PostgreSQL: a run's submission and outputs, reads by Task and by prediction per tenant, a repeated prediction, and the sweep's walk through runs past their retention |
-| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity, which fails the second run as `prediction_conflict`; a run whose outputs the database refuses to record, which fails as `store_refused` and reads as its Task ended; an estimate from the provider's quote above the base price; a run the provider cannot price |
+| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity, which fails the second run as `prediction_conflict`; a run whose outputs the database refuses to record, which fails as `store_refused` and reads as its Task ended; the listing newest first, each run as its Task stands; an estimate from the provider's quote above the base price; a run the provider cannot price |
 | `tests/database_conformance.rs` | Core's database rules over every statement and the schema |
 | `tests/acceptance.rs` | Ignored by default: a run through the Gateway of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run; gated by `MEDIA_PROVIDER_QUALIFICATION=1`, one billed run through the installation against the real provider, its outputs read through Artifact, its estimate and actual cost in the Gateway's cost view, and its completion matching the configuration |
 | `tests/provider_qualification.rs` | Ignored by default and gated by `MEDIA_PROVIDER_QUALIFICATION=1`: one billed generation with the real provider through the full flow, on the model with the lowest quote for its input, whose bill the quote covers |

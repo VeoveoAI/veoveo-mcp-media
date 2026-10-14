@@ -346,9 +346,9 @@ fn usd(amount: f64) -> anyhow::Result<Money> {
 }
 
 /// One `run` Task's work. An error none of its steps handled fails the run under a
-/// code that names its cause, unless the Task parked, stopped with its process or left
-/// this worker: those keep the Task for its wait or its recovery. The Task alone records
-/// how the run ended.
+/// code that names its cause, unless the Task parked, stopped with its process, left
+/// this worker or lost its database connection: those keep the Task for its wait or its
+/// recovery. The Task alone records how the run ended.
 pub async fn run(ctx: TaskContext, media: MediaWork) -> anyhow::Result<TaskTransition> {
     match attempt(&ctx, &media).await {
         Err(error) if !keeps_the_task(&error) && !ctx.stopping() => {
@@ -607,11 +607,14 @@ fn is_task_stop(error: &anyhow::Error) -> bool {
 }
 
 /// Whether `error` leaves the Task to the worker as it stands: the Task parked on an
-/// operation, stopped at a checkpoint, or no longer belongs to this instance.
+/// operation, stopped at a checkpoint, no longer belongs to this instance, or lost its
+/// database connection, which says nothing about the run and sends the Task to its
+/// recovery.
 fn keeps_the_task(error: &anyhow::Error) -> bool {
     error.downcast_ref::<TaskStop>().is_some()
         || TaskWorkError::is_parked(error)
         || TaskWorkError::is_lost(error)
+        || TaskWorkError::is_interrupted(error)
 }
 
 /// Admit the run: the catalog holds the model, and the input satisfies its schema.

@@ -730,3 +730,30 @@ async fn a_run_the_provider_cannot_price_fails_before_it_reaches_the_provider() 
     })
     .await;
 }
+
+#[tokio::test]
+async fn the_listing_shows_the_newest_run_first_as_its_task_stands() {
+    within(async {
+        let mut harness = harness(true).await;
+        let first = harness.run(IMAGE_MODEL, prompt()).await;
+        harness
+            .until(&first, |view| view["status"] == "completed")
+            .await;
+        // The second run waits for a worker, so the listing shows it queued.
+        harness.stop_worker().await;
+        let second = harness.run(IMAGE_MODEL, prompt()).await;
+        let page = harness.predictions().page(&owner(), None).await.unwrap();
+        assert_eq!(
+            page.items
+                .iter()
+                .map(|item| (item.task.task_id.to_string(), item.status()))
+                .collect::<Vec<_>>(),
+            vec![
+                (second.clone(), PredictionStatus::Queued),
+                (first, PredictionStatus::Succeeded),
+            ]
+        );
+        assert!(page.next.is_none());
+    })
+    .await;
+}
