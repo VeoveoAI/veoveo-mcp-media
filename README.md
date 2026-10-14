@@ -59,7 +59,7 @@ docker build --target check .
 The `check` stage checks the `.sqlx` metadata against a migrated PostgreSQL 18.6
 database, then runs rustfmt, clippy with warnings denied, cargo-deny, cargo-hack on each
 feature and the nextest `ci` profile with every feature on. The run tests start a
-private PostgreSQL, a private RustFS and the fake provider per test. The gate never
+private PostgreSQL, a private SeaweedFS and the fake provider per test. The gate never
 reaches the real provider.
 
 ## Development Environment

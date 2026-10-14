@@ -1,7 +1,7 @@
 //! Generations end to end on the SDK's in-process mesh: Media runs against the fake
 //! provider over a fresh database, parks on the provider's operation, takes the signed
 //! webhook on its public route, streams the output into Artifact in process over a
-//! private RustFS for the run's caller, and records the run's estimated and actual cost.
+//! private SeaweedFS for the run's caller, and records the run's estimated and actual cost.
 mod support;
 
 use std::{

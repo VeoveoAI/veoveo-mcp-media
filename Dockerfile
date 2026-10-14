@@ -26,10 +26,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
         cargo-insta@1.49.0 \
     && cargo install --locked sqlx-cli@0.9.0 --no-default-features --features postgres,rustls,sqlx-toml
 COPY env/profile.d/rust.sh /etc/profile.d/rust.sh
-# RustFS 1.0.1, the installation's object store. The run tests store outputs through an
-# in-process Artifact over a private server per test process, as they start PostgreSQL.
-COPY --from=rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c \
-    /usr/bin/rustfs /usr/local/bin/rustfs
+# SeaweedFS 4.48, the installation's object store. The run tests store outputs through an
+# in-process Artifact over a private `weed mini` per test process, as they start PostgreSQL.
+COPY --from=chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d \
+    /usr/bin/weed /usr/local/bin/weed
 # A development environment installs toolchains, components and crates, so the sandbox user owns them.
 RUN useradd --create-home --uid 1000 --shell /bin/bash sandbox \
     && chown -R sandbox:sandbox /usr/local/rustup /usr/local/cargo

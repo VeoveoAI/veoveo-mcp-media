@@ -55,7 +55,7 @@ cost in core's usage ledger.
 ## Build And Test
 
 - `cargo test -p veoveo-mcp-media --all-features` with the PostgreSQL 18 server
-  programs and `rustfs` on `PATH`, as the `dev` image provides them.
+  programs and `weed` (SeaweedFS) on `PATH`, as the `dev` image provides them.
 - `cargo test -p veoveo-mcp-media --no-default-features --features contract` checks the
   contract alone.
 - `tests/run.rs` runs generations against the fake provider through the SDK's mesh with

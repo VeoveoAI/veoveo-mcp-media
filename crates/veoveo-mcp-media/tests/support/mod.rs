@@ -1,10 +1,10 @@
 //! Shared fixtures: a fresh database migrated for Artifact and Media under their own
-//! logins, a private RustFS, Artifact in process, the fake provider, and both servers on
+//! logins, a private SeaweedFS, Artifact in process, the fake provider, and both servers on
 //! the SDK's in-process mesh with Media's run worker on its own process instance.
-//! Requires the PostgreSQL 18 server programs and `rustfs` on `PATH`.
+//! Requires the PostgreSQL 18 server programs and `weed` (SeaweedFS) on `PATH`.
 #![allow(dead_code)]
 
-pub mod rustfs;
+pub mod seaweedfs;
 
 use std::{collections::BTreeSet, future::Future, net::SocketAddr, sync::Arc, time::Duration};
 
@@ -46,7 +46,7 @@ use veoveo_task_runtime::{Instance, TaskRuntime, TaskSnapshot, TaskStatus};
 use veoveo_test_fixtures::store::TestDb;
 use veoveo_types::{ServerSlug, TaskId};
 
-use rustfs::TestRustFs;
+use seaweedfs::TestSeaweedFs;
 
 /// The secret the fake provider signs its webhooks with.
 pub const WEBHOOK_SECRET: &str = "whsec_media-test-secret";
@@ -98,7 +98,7 @@ pub struct Harness {
     events: bool,
     /// Media's HTTP process's own runtime, which stores provider events.
     pub routes: TaskRuntime,
-    _rustfs: TestRustFs,
+    _seaweedfs: TestSeaweedFs,
     background: Vec<tokio::task::JoinHandle<()>>,
     stop: CancellationToken,
 }
@@ -225,9 +225,9 @@ pub async fn harness_for(
     let stop = CancellationToken::new();
     let mut background = Vec::new();
 
-    // Artifact in process, over its own login and a private RustFS.
-    let rustfs = TestRustFs::start().await;
-    let storage = rustfs.storage().await;
+    // Artifact in process, over its own login and a private SeaweedFS.
+    let seaweedfs = TestSeaweedFs::start().await;
+    let storage = seaweedfs.storage().await;
     let artifact_platform = db.server_store(&artifact()).await;
     let registry = Arc::new(veoveo_mcp_artifact::contract::audit_registry().unwrap());
     veoveo_audit::AuditStore::new(artifact_platform.clone(), registry.clone())
@@ -362,7 +362,7 @@ pub async fn harness_for(
         work,
         events,
         routes,
-        _rustfs: rustfs,
+        _seaweedfs: seaweedfs,
         background,
         stop,
     };
