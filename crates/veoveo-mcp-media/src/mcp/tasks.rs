@@ -20,7 +20,7 @@ use veoveo_sdk_rust::{
     },
     hosting::gateway_identity,
 };
-use veoveo_task_runtime::{CreateTask, RecoveryClass, TaskRuntime, TaskStatus};
+use veoveo_task_runtime::{CreateTask, RecoveryClass, TaskError, TaskRuntime, TaskStatus};
 use veoveo_types::TaskId;
 
 use crate::{
@@ -145,25 +145,18 @@ impl DurableTaskService for MediaTasks {
     /// runtime cancels it at once, and its prediction ends with it. A claimed or parked
     /// run reaches its wait, which carries the cancellation to the provider and ends the
     /// prediction.
-    ///
-    /// The caller's ownership is checked through the owner's query, and the request goes
-    /// through the server's cancellation, which leaves a parked Task cancel-requested.
-    /// Core's owner cancellation statement at 50e72a3 cancels an unowned parked Task
-    /// outright, which its `task_parked` constraint refuses.
     async fn cancel_task(&self, caller: &Self::Caller, task_id: String) -> Result<(), McpError> {
         let unknown = || McpError::invalid_params("unknown task id", None);
         let task = veoveo_task_runtime::parse_task_id(&task_id).map_err(|_| unknown())?;
-        self.runtime
-            .for_owner(&identity::task_owner(caller)?)
-            .get(task)
-            .await
-            .map_err(|error| internal(&error))?
-            .ok_or_else(unknown)?;
         let snapshot = self
             .runtime
+            .for_owner(&identity::task_owner(caller)?)
             .cancel(task)
             .await
-            .map_err(|error| internal(&error))?;
+            .map_err(|error| match error {
+                TaskError::NotFound(_) | TaskError::WrongServer(_) => unknown(),
+                error => internal(&error),
+            })?;
         if snapshot.status == TaskStatus::Cancelled {
             self.store
                 .finish(

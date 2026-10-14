@@ -28,14 +28,14 @@ port         8802
 
 | Standard or protocol | Implemented profile |
 |---|---|
-| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-sdk-rust` 25d9ea5 implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
+| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-sdk-rust` e1642b7 implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
 | [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12/) | Tool inputs and results and resource contents. A run's input is checked with jsonschema 0.58.6 against the JSON Schema the provider publishes for the model; that schema's shape is the provider's. |
 | [URI Template RFC 6570](https://www.rfc-editor.org/rfc/rfc6570) | Discovery declares simple variables, one `{+model_id}` reserved expansion for a model's `/`-separated components, and collection pages that continue through a `cursor` query parameter. |
 | [JWT access tokens RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html) and [Token Exchange RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | The Gateway forwards each request with an access token naming the caller. A run calls Artifact through the Gateway with a token the SDK obtains by exchange for the run's Task, narrowed to Media's declared uses of Artifact that the caller holds. |
 | [HMAC-SHA256, RFC 2104](https://www.rfc-editor.org/rfc/rfc2104) | The provider signs each webhook over `{webhook-id}.{webhook-timestamp}.{body}` with the account's webhook secret; the `webhook-signature` header carries `v3,<hex>` signatures. Media refuses a signing time more than 300 seconds from its clock. |
-| [FOCUS 1.4](https://focus.finops.org/focus-specification/) usage records in core's [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72/platform/usage/DESIGN.md) | One usage kind, `media.generation`, in the FOCUS service category "AI and Machine Learning" with the unit `Requests`, and amounts in [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) US dollars. |
+| [FOCUS 1.4](https://focus.finops.org/focus-specification/) usage records in core's [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/platform/usage/DESIGN.md) | One usage kind, `media.generation`, in the FOCUS service category "AI and Machine Learning" with the unit `Requests`, and amounts in [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) US dollars. |
 | [Veoveo server registration](https://github.com/VeoveoAI/veoveo-sdk-rust) | Media registers through RFC 7591, removes its registration through RFC 7592, and declares its permissions and its uses of Artifact in `ai.veoveo/authorization`. |
-| [PostgreSQL 18](https://www.postgresql.org/docs/18/) | Server 18.6 through sqlx 0.9.0, under the [installation database design](https://github.com/VeoveoAI/veoveo-core/blob/50e72a3a1895d59b4f1eedd2b50cf947fa5d2e72/docs/DATABASE.md) of `veoveo-core`. Media owns the schema `media`, applies its own migrations and runs every statement from a `.sql` file that sqlx checks. Row triggers publish changes on the `media` channel. |
+| [PostgreSQL 18](https://www.postgresql.org/docs/18/) | Server 18.6 through sqlx 0.9.0, under the [installation database design](https://github.com/VeoveoAI/veoveo-core/blob/d5353ac1c4bba0cea6e115c734a000e598055aa6/docs/DATABASE.md) of `veoveo-core`. Media owns the schema `media`, applies its own migrations and runs every statement from a `.sql` file that sqlx checks. Row triggers publish changes on the `media` channel. |
 | The provider's HTTP API | The subset Media calls: the model registry, a submission with an optional webhook, a prediction's status endpoint, a billing search and a prediction's deletion. Every response is wrapped in `{code, message, data}`. |
 
 ## Domain Contract
@@ -227,7 +227,6 @@ signs the client assertions of its token exchanges.
 | Owner naming producers and consumers | Pending (C33) |
 | The Studio App | Arrives with the TypeScript SDK |
 | Subscription delivery across tenants | A prediction listing's change notifies every listener of `media://predictions`, who rereads only their own runs |
-| Cancellation through `tasks/cancel` | Media cancels through the server's cancellation after checking ownership, because core's owner cancellation at 50e72a3 refuses a parked Task |
 
 ## Verification
 
