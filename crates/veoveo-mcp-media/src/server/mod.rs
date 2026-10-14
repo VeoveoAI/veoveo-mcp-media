@@ -145,18 +145,20 @@ async fn serve(
     )
     .await
     .context("discovering the Gateway's token endpoint")?;
-    let settings = Arc::new(args.run_settings()?);
+    let settings = Arc::new(args.run_settings(deployment)?);
     let work = MediaWork::new(store.clone(), catalog.clone(), provider, http, settings)?;
     let mut worker = TaskWorker::new(runtime.clone()).calls(calls).usage(usage);
     // The installation's public origin selects webhook completion, with callback URLs
     // under Media's path on it; without one, runs send no callback URL and check the
     // provider's status endpoint.
-    match &args.public_origin {
+    match deployment.origin() {
         Some(origin) => {
             tracing::info!("runs complete through the provider's webhooks");
-            worker = worker.callbacks(CallbackUrls::new(origin.clone(), crate::server()).map_err(
-                |_| anyhow::anyhow!("the public origin cannot carry Media's callback paths"),
-            )?);
+            worker = worker.callbacks(
+                CallbackUrls::new(origin.url().clone(), crate::server()).map_err(|_| {
+                    anyhow::anyhow!("the public origin cannot carry Media's callback paths")
+                })?,
+            );
         }
         None => tracing::info!("runs complete through bounded status checks"),
     }

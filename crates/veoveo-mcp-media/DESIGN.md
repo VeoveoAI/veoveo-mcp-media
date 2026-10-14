@@ -28,7 +28,7 @@ port         8802
 
 | Standard or protocol | Implemented profile |
 |---|---|
-| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-sdk-rust` e1642b7 implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
+| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-sdk-rust` 67314b4 implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
 | [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12/) | Tool inputs and results and resource contents. A run's input is checked with jsonschema 0.58.6 against the JSON Schema the provider publishes for the model; that schema's shape is the provider's. |
 | [URI Template RFC 6570](https://www.rfc-editor.org/rfc/rfc6570) | Discovery declares simple variables, one `{+model_id}` reserved expansion for a model's `/`-separated components, and collection pages that continue through a `cursor` query parameter. |
 | [JWT access tokens RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html) and [Token Exchange RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | The Gateway forwards each request with an access token naming the caller. A run calls Artifact through the Gateway with a token the SDK obtains by exchange for the run's Task, narrowed to Media's declared uses of Artifact that the caller holds. |
@@ -216,7 +216,7 @@ signs the client assertions of its token exchanges.
 | `VEOVEO_GATEWAY_ISSUER`, `VEOVEO_REGISTRATION_SECRET`, `VEOVEO_KEY_DIRECTORY` | Registration with the Gateway |
 | `MEDIA_PROVIDER_URL` | The provider's API origin; required |
 | `MEDIA_PROVIDER_API_KEY`, `MEDIA_PROVIDER_WEBHOOK_SECRET` | The provider's API key and webhook secret |
-| `VEOVEO_PUBLIC_ORIGIN` | The installation's public origin, under which the provider reaches Media's callback path; selects events completion |
+| `VEOVEO_PUBLIC_ORIGIN` | The installation's public `https` origin, which joins Media's SDK deployment: Media accepts requests for its host, the provider reaches Media's callback path under it, and setting it selects events completion |
 | `MEDIA_OUTPUT_HOSTS` | The hosts outputs may come from, beside the provider's own |
 | `MEDIA_OUTPUT_MAX_BYTES`, `MEDIA_GENERATION_TIMEOUT_SECS`, `MEDIA_RUN_RETENTION_DAYS`, `MEDIA_OUTPUT_RETENTION_DAYS` | Output bound, generation deadline, run retention and output retention |
 

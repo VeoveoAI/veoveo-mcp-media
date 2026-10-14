@@ -110,15 +110,15 @@ openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
      VEOVEO_KEY_DIRECTORY=/sandbox/media/keys \
      VEOVEO_ALLOW_LOOPBACK_HOSTS=true \
      MEDIA_PROVIDER_URL=http://127.0.0.1:8803 \
-     VEOVEO_PUBLIC_ORIGIN=http://127.0.0.1:8802 \
      "$bin"'
 openshell forward start 8802 vv-mcp-media -d
 ```
 
-In the local installation the fake provider is the only party that calls back, from
-inside the environment, so the origin it reaches Media at is Media's own listener on
-loopback, and it posts each outcome to `http://127.0.0.1:8802/media/operations/…`.
-Without `VEOVEO_PUBLIC_ORIGIN`, runs complete through status checks of the fake instead.
+Without a public origin, runs complete through status checks of the fake. An
+installation whose tunnel carries its public origin sets `VEOVEO_PUBLIC_ORIGIN` to that
+`https` origin, such as `https://veoveo.example.com`; Media then accepts requests for the
+origin's host, and the provider posts each outcome to
+`https://veoveo.example.com/media/operations/…`.
 Media registers before it listens, and the Gateway reaches it as
 `http://host.openshell.internal:8802/media/mcp`. Media removes its registration when it
 receives SIGTERM or Ctrl-C.

@@ -4241,7 +4241,7 @@ dependencies = [
 [[package]]
 name = "veoveo-mcp-artifact"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=2c10f6acbef82bca116ce5a7e59ef1defc006c17#2c10f6acbef82bca116ce5a7e59ef1defc006c17"
+source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=ce550f89c6555cd9b949503500a362f8a4bddd71#ce550f89c6555cd9b949503500a362f8a4bddd71"
 dependencies = [
  "anyhow",
  "aws-sdk-s3",
@@ -4360,7 +4360,7 @@ dependencies = [
 [[package]]
 name = "veoveo-sdk-rust"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-sdk-rust?rev=e1642b72a8f547385995c05df681afe2ca7ec78a#e1642b72a8f547385995c05df681afe2ca7ec78a"
+source = "git+https://github.com/VeoveoAI/veoveo-sdk-rust?rev=67314b4913e16a86cff6cb2558507f818227a79f#67314b4913e16a86cff6cb2558507f818227a79f"
 dependencies = [
  "anyhow",
  "aws-lc-rs",

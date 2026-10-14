@@ -24,11 +24,11 @@ veoveo-oauth-client = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "
 # The Rust SDK for Veoveo MCP servers: the contract feature for declarations and typed
 # calls, the server feature for hosting, registration, Task work, operations, usage and
 # calls to other servers.
-veoveo-sdk-rust = { git = "https://github.com/VeoveoAI/veoveo-sdk-rust", rev = "e1642b72a8f547385995c05df681afe2ca7ec78a", default-features = false }
+veoveo-sdk-rust = { git = "https://github.com/VeoveoAI/veoveo-sdk-rust", rev = "67314b4913e16a86cff6cb2558507f818227a79f", default-features = false }
 # Artifact, where Media stores what a provider generates: its `client` feature in the
 # server, its hosted server in the tests that run Artifact in process. Artifact pins the
 # same SDK revision, so one SDK serves both.
-veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "2c10f6acbef82bca116ce5a7e59ef1defc006c17", default-features = false }
+veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "ce550f89c6555cd9b949503500a362f8a4bddd71", default-features = false }
 
 anyhow = "=1.0.104"
 # The fake provider's HTTP server and the server's public callback route.
