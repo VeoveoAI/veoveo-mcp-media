@@ -92,18 +92,24 @@ openshell sandbox exec vv-mcp-media -- bash -lc 'mkdir -p /sandbox/state && umas
 
 OpenShell pins every policy-listed executable path to the SHA-256 it first observes, so
 Media and the fake provider run from content-addressed copies under `/sandbox/run`.
+Served binaries build into their own target directory, `/sandbox/target-serve`, apart
+from `target/`, where the gate and acceptance builds enable test-only dependency
+features. Each binary builds alone, right before it is installed: the fake provider with
+the `testing` feature it requires, Media without it, so Media never serves a test build.
 Start the fake provider in one terminal and Media in another:
 
 ```sh
 openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
-  && cargo build --locked --features testing --bins \
-  && fake=/sandbox/run/veoveo-mcp-media-fake-provider-$(sha256sum target/debug/veoveo-mcp-media-fake-provider | cut -c1-16) \
-  && install -D -m 0755 target/debug/veoveo-mcp-media-fake-provider "$fake" \
+  && cargo build --locked --target-dir /sandbox/target-serve --features testing \
+       --bin veoveo-mcp-media-fake-provider \
+  && fake=/sandbox/run/veoveo-mcp-media-fake-provider-$(sha256sum /sandbox/target-serve/debug/veoveo-mcp-media-fake-provider | cut -c1-16) \
+  && install -D -m 0755 /sandbox/target-serve/debug/veoveo-mcp-media-fake-provider "$fake" \
   && set -a && . /sandbox/state/media.env && set +a \
   && setsid "$fake" --listen 127.0.0.1:8803'
 openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
-  && bin=/sandbox/run/veoveo-mcp-media-$(sha256sum target/debug/veoveo-mcp-media | cut -c1-16) \
-  && install -D -m 0755 target/debug/veoveo-mcp-media "$bin" \
+  && cargo build --locked --target-dir /sandbox/target-serve --bin veoveo-mcp-media \
+  && bin=/sandbox/run/veoveo-mcp-media-$(sha256sum /sandbox/target-serve/debug/veoveo-mcp-media | cut -c1-16) \
+  && install -D -m 0755 /sandbox/target-serve/debug/veoveo-mcp-media "$bin" \
   && set -a && . /sandbox/state/media.env && set +a \
   && VEOVEO_PUBLIC_BASE_URL=http://host.openshell.internal:8802 \
      VEOVEO_GATEWAY_ISSUER=http://host.openshell.internal:8080 \
