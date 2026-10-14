@@ -20,9 +20,9 @@ pub(crate) fn store_error(error: MediaStoreError) -> McpError {
     match error {
         MediaStoreError::StaleCursor => McpError::invalid_params(error.to_string(), None),
         MediaStoreError::InvalidOwner => McpError::invalid_request(error.to_string(), None),
-        failure @ (MediaStoreError::Corrupt(_) | MediaStoreError::Database(_)) => {
-            internal(&failure)
-        }
+        failure @ (MediaStoreError::Corrupt(_)
+        | MediaStoreError::PredictionConflict(_)
+        | MediaStoreError::Database(_)) => internal(&failure),
     }
 }
 

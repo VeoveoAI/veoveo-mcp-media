@@ -225,11 +225,22 @@ async fn serve(
     served
 }
 
-/// Delete ended runs past their retention, in batches, until `stop`.
+/// Settle runs whose Task ended without them, then delete ended runs past their
+/// retention, in batches, until `stop`.
 async fn sweep(store: MediaStore, retention: Duration, stop: CancellationToken) {
     let retention = chrono::TimeDelta::from_std(retention).unwrap_or(chrono::TimeDelta::MAX);
     loop {
         let cutoff = Utc::now() - retention;
+        loop {
+            match store.settle(cutoff).await {
+                Ok(0) => break,
+                Ok(_) => continue,
+                Err(error) => {
+                    tracing::warn!(%error, "the Media sweep could not settle ended runs");
+                    break;
+                }
+            }
+        }
         loop {
             match store.prune(cutoff).await {
                 Ok(0) => break,

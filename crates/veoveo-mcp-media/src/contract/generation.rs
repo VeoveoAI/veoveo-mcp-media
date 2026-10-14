@@ -54,6 +54,32 @@ impl PredictionStatus {
     }
 }
 
+/// Why a run failed: the error code its Task records, beside a message that names no
+/// secret.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Vocabulary)]
+pub enum RunFailureCode {
+    /// The catalog could not be read when the run started.
+    CatalogUnavailable,
+    /// The catalog holds no such model.
+    UnknownModel,
+    /// The model's schema refuses the input.
+    InvalidInput,
+    /// The provider refused the submission.
+    ProviderRefused,
+    /// The provider named a prediction that another run already holds.
+    PredictionConflict,
+    /// The provider failed, timed out, cancelled or deleted the prediction.
+    GenerationFailed,
+    /// The provider reported no outcome before the deadline.
+    GenerationUnresolved,
+    /// An output could not be fetched or stored in Artifact.
+    OutputNotStored,
+    /// The installation database refused or lost a write the run needed.
+    StoreUnavailable,
+    /// The run stopped on an error Media does not classify. Media's log holds its details.
+    RunError,
+}
+
 /// A prediction as Media tracks it, without the run's input.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -135,6 +161,22 @@ pub struct PredictionView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failure_codes_use_snake_case() {
+        assert_eq!(
+            RunFailureCode::PredictionConflict.as_str(),
+            "prediction_conflict"
+        );
+        assert_eq!(
+            RunFailureCode::GenerationUnresolved.as_str(),
+            "generation_unresolved"
+        );
+        assert_eq!(
+            "output_not_stored".parse::<RunFailureCode>().unwrap(),
+            RunFailureCode::OutputNotStored
+        );
+    }
 
     #[test]
     fn statuses_use_snake_case_and_final_ones_end_the_run() {

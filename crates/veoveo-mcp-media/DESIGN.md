@@ -157,6 +157,27 @@ their net amount becomes the run's actual cost. A bill that does not appear befo
 billing deadline leaves the estimate as the run's cost. Every Task view carries its
 costs in its `ai.veoveo/usage` metadata.
 
+### Failures
+
+A failed run's Task records one of these codes beside a message that names no secret:
+
+| Code | The run failed because |
+|---|---|
+| `catalog_unavailable` | The catalog could not be read when the run started |
+| `unknown_model` | The catalog holds no such model |
+| `invalid_input` | The model's schema refuses the input |
+| `provider_refused` | The provider refused the submission |
+| `prediction_conflict` | The provider named a prediction that another run already holds |
+| `generation_failed` | The provider failed, timed out, cancelled or deleted the prediction |
+| `generation_unresolved` | The provider reported no outcome before the deadline; the prediction reads as unresolved |
+| `output_not_stored` | An output could not be fetched or stored in Artifact |
+| `store_unavailable` | The installation database refused or lost a write the run needed |
+| `run_error` | The run stopped on an error Media does not classify; Media's log holds the details |
+
+A run that stops on an error none of its steps handles fails under the code that
+names the cause, unless its Task parked, stopped with its process, or left the
+worker: those Tasks stay with their wait or their recovery.
+
 ### Cancellation
 
 A run cancelled before a worker claims it never reaches the provider. A claimed run
@@ -185,10 +206,18 @@ registry. Probes never call the provider.
 
 | Table | Holds | Retention |
 |---|---|---|
-| `media.prediction` | One row per run: tenant, Task, owner, labels, model, the provider's prediction and status endpoint, status, error, stored outputs and times | Until 30 days after the run ended, when the sweep deletes it |
+| `media.prediction` | One row per run: tenant, Task, owner, labels, model, the provider's prediction and status endpoint, progress, error, stored outputs and times | Until 30 days after the run ended, when the sweep deletes it |
 
 Core's Task runtime holds the Task, its steps, its operations and their events; core's
 usage ledger holds its costs.
+
+A run's ending follows its Task. Every read of a run joins its Task in core's
+`tasks.task`, and once the Task has ended, its status, failure message and end time
+are the run's whatever the row recorded, so a run never reads as in progress after its
+Task ended. The row keeps Media's own progress before that: queued, processing and
+storing. The hourly sweep copies the Task's ending into each row still open whose Task
+has ended, ends as unresolved a row older than the retention whose Task no longer
+exists, and then deletes rows past their retention.
 
 ## Authorization
 
@@ -235,8 +264,8 @@ signs the client assertions of its token exchanges.
 | Suite | Covers |
 |---|---|
 | Unit tests | Identities, resource routes, permissions, webhook signatures, the provider client's address, status-endpoint and redaction rules, the catalog's pages, cursors and input checks, the requirement table and tool annotations, prompts and configuration |
-| `tests/store.rs` | The `media` schema on PostgreSQL: run states and their first ending, reads by owner and labels, keyset pages and their cursors, and the sweep |
-| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database |
+| `tests/store.rs` | The `media` schema on PostgreSQL: run progress and its first ending, reads by owner and labels, keyset pages and their cursors, and the sweep |
+| `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity; a run whose row the database refuses to update, which reads as its Task ended and which the sweep settles |
 | `tests/database_conformance.rs` | Core's database rules over every statement and the schema |
 | `tests/acceptance.rs` | Ignored by default: a run through the Gateway of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run |
 | `tests/provider_qualification.rs` | Ignored by default and gated by `MEDIA_PROVIDER_QUALIFICATION=1`: one billed generation with the real provider through the full flow |

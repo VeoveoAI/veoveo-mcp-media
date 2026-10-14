@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- One run by its Task.\nSELECT\n    tenant AS \"tenant: StoredTenant\",\n    task_id,\n    owner AS \"owner: StoredPrincipal\",\n    data_labels,\n    model_id,\n    prediction_id,\n    status_url,\n    status,\n    error,\n    outputs AS \"outputs: Json<Vec<GeneratedArtifact>>\",\n    created_at,\n    updated_at,\n    completed_at\nFROM media.prediction\nWHERE tenant = $1 AND task_id = $2\n",
+  "query": "-- One run by its Task, with how its Task ended.\nSELECT\n    p.tenant AS \"tenant: StoredTenant\",\n    p.task_id,\n    p.owner AS \"owner: StoredPrincipal\",\n    p.data_labels,\n    p.model_id,\n    p.prediction_id,\n    p.status_url,\n    p.status,\n    p.error,\n    p.outputs AS \"outputs: Json<Vec<GeneratedArtifact>>\",\n    p.created_at,\n    p.updated_at,\n    p.completed_at,\n    t.status AS \"task_status?: TaskStatus\",\n    t.error_code AS \"task_error_code?\",\n    t.error_message AS \"task_error?\",\n    t.completed_at AS \"task_completed_at?\"\nFROM media.prediction AS p\n-- The run's Task in core's Task runtime, whose ending the run's status follows.\nLEFT JOIN tasks.task AS t ON t.id = p.task_id AND t.tenant_id = p.tenant\nWHERE p.tenant = $1 AND p.task_id = $2\n",
   "describe": {
     "columns": [
       {
@@ -145,6 +145,50 @@
             "name": "completed_at"
           }
         }
+      },
+      {
+        "ordinal": 13,
+        "name": "task_status?: TaskStatus",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "task_error_code?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "error_code"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "task_error?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "error_message"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "task_completed_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "completed_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -166,8 +210,12 @@
       false,
       false,
       false,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "f29cf3c0f79b4da59f705e17c461a0e3ed5269745727f59cff90ce35ab14f0d5"
+  "hash": "ad5e2efd4d022c2ef66ff8a1bf749328454d3d1219ba6ac3220d44afabd5f7f6"
 }
