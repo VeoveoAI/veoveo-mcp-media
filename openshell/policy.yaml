@@ -53,8 +53,9 @@ network_policies:
   #   reads the issuer's RFC 8414 metadata and the JWK Set its jwks_uri names.
   # - Media exchanges a run's Task for a token at the token endpoint and calls Artifact
   #   through the profile endpoint to store the run's outputs.
-  # - Acceptance tests obtain tokens as the installation's acceptance callers and call
-  #   Media and Artifact through the profile endpoint.
+  # - Acceptance tests obtain tokens as the installation's acceptance callers, call
+  #   Media and Artifact through the profile endpoint, and read the caller's daily
+  #   cost view.
   local_gateway:
     endpoints:
       - host: host.openshell.internal
@@ -92,6 +93,9 @@ network_policies:
           - allow:
               method: DELETE
               path: "/mcp/local"
+          - allow:
+              method: GET
+              path: "/admin/local/usage/daily"
         credential_binding:
           provider: vv-registration
     binaries:

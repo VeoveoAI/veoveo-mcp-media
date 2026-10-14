@@ -31,16 +31,18 @@ use veoveo_sdk_rust::{
     },
 };
 use veoveo_task_runtime::{
-    CheckObservation, CheckSchedule, ExternalJobId, Operation, OperationCalls, OperationSpec,
-    StepDispatch, StepKey, Submission, TaskError, TaskFailure, TaskTransition, WaitOutcome,
+    CheckObservation, CheckSchedule, Completion, ExternalJobId, Operation, OperationCalls,
+    OperationSpec, StepDispatch, StepKey, Submission, TaskError, TaskFailure, TaskTransition,
+    WaitOutcome,
 };
 use veoveo_types::{ResourceAddress, TaskId};
 
 use crate::{
     catalog::{Catalog, InputError},
     contract::{
-        GENERATION_COMPLETED, GENERATION_FORMAT, GeneratedArtifact, GenerationResult,
-        MediaPredictionId, MediaResource, PredictionStatus, RunFailureCode, RunRequest,
+        CompletionMode, GENERATION_COMPLETED, GENERATION_FORMAT, GeneratedArtifact,
+        GenerationResult, MediaPredictionId, MediaResource, PredictionStatus, RunFailureCode,
+        RunRequest,
     },
     provider::{
         BillingOutcome, ProviderClient, ProviderError, billing_key, billing_provider,
@@ -450,6 +452,7 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
                                     task_id,
                                     Some(&prediction.id),
                                     prediction.urls.as_ref().map(|urls| urls.get.as_str()),
+                                    None,
                                     Utc::now(),
                                 )
                                 .await?;
@@ -485,6 +488,9 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
         .external_id
         .as_ref()
         .and_then(|job| MediaPredictionId::parse(job.as_str()).ok());
+    // The operation records how its outcome arrives; a run resumed under another
+    // configuration keeps the mode it was dispatched with.
+    let completion = completion_mode(&operation.completion);
     media
         .store
         .mark_processing(
@@ -492,6 +498,7 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
             task_id,
             prediction_id.as_ref(),
             None,
+            Some(completion),
             Utc::now(),
         )
         .await?;
@@ -579,6 +586,7 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
             prediction_id: Some(prediction.id.clone()),
             model_id: prediction.model.clone(),
             status: PredictionStatus::Succeeded,
+            completion: Some(completion),
             error: None,
             output_count: u32::try_from(outputs.len()).unwrap_or(u32::MAX),
             created_at: ctx.task().created_at,
@@ -602,6 +610,14 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
     )
     .map_err(|error| anyhow!(error.message.to_string()))?;
     Ok(mcp_task_completion(GENERATION_COMPLETED, completion)?)
+}
+
+/// How an operation's outcome arrives, as a run's prediction names it.
+fn completion_mode(completion: &Completion) -> CompletionMode {
+    match completion {
+        Completion::Events => CompletionMode::Events,
+        Completion::Checks(_) => CompletionMode::Checks,
+    }
 }
 
 /// The durable step that holds the provider's quote for the run.

@@ -21,8 +21,8 @@ use veoveo_task_runtime::TaskStatus;
 use veoveo_types::{DataLabelId, PrincipalId, TaskId, TenantId};
 
 use crate::contract::{
-    GeneratedArtifact, ListCursor, MediaModelId, MediaPredictionId, PredictionStatus,
-    PredictionSummary, RunFailureCode,
+    CompletionMode, GeneratedArtifact, ListCursor, MediaModelId, MediaPredictionId,
+    PredictionStatus, PredictionSummary, RunFailureCode,
 };
 
 /// The most runs one page holds.
@@ -123,6 +123,7 @@ pub struct PredictionRow {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    pub completion: Option<String>,
     /// The run's Task in core's Task runtime: its status, error code, failure message
     /// and end time, all absent when the Task no longer exists.
     pub task_status: Option<TaskStatus>,
@@ -251,6 +252,14 @@ impl PredictionRow {
             model_id: MediaModelId::parse(self.model_id.as_str())
                 .map_err(|_| MediaStoreError::Corrupt("model"))?,
             status: self.status()?,
+            completion: self
+                .completion
+                .as_deref()
+                .map(|mode| {
+                    mode.parse::<CompletionMode>()
+                        .map_err(|_| MediaStoreError::Corrupt("completion"))
+                })
+                .transpose()?,
             error: self.error(),
             output_count: u32::try_from(self.outputs.0.len())
                 .map_err(|_| MediaStoreError::Corrupt("outputs"))?,
@@ -338,13 +347,14 @@ impl MediaStore {
     }
 
     /// The provider accepted the run, under its prediction and status endpoint when it
-    /// named them.
+    /// named them, and with how its outcome reaches the run once that is known.
     pub async fn mark_processing(
         &self,
         tenant: StoredTenant,
         task_id: TaskId,
         prediction: Option<&MediaPredictionId>,
         status_url: Option<&str>,
+        completion: Option<CompletionMode>,
         now: DateTime<Utc>,
     ) -> Result<(), MediaStoreError> {
         sqlx::query_file!(
@@ -354,6 +364,7 @@ impl MediaStore {
             prediction.map(MediaPredictionId::as_str),
             status_url,
             now,
+            completion.as_ref().map(CompletionMode::as_str),
         )
         .execute(self.pool())
         .await

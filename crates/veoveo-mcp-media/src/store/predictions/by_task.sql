@@ -13,6 +13,7 @@ SELECT
     p.created_at,
     p.updated_at,
     p.completed_at,
+    p.completion,
     t.status AS "task_status?: TaskStatus",
     t.error_code AS "task_error_code?",
     t.error_message AS "task_error?",

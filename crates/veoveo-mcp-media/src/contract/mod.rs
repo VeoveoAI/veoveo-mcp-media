@@ -14,9 +14,9 @@ pub use catalog::{
     ModelCatalogItem, ModelCatalogPage, ModelSchema, ModelSchemaRequest, ModelsRequest,
 };
 pub use generation::{
-    GENERATION_COMPLETED, GENERATION_FORMAT, GeneratedArtifact, GenerationResult, PredictionEntry,
-    PredictionListing, PredictionStatus, PredictionSummary, PredictionView, RunFailureCode,
-    RunRequest,
+    CompletionMode, GENERATION_COMPLETED, GENERATION_FORMAT, GeneratedArtifact, GenerationResult,
+    PredictionEntry, PredictionListing, PredictionStatus, PredictionSummary, PredictionView,
+    RunFailureCode, RunRequest,
 };
 pub use ids::{
     ListCursor, MAX_CURSOR_BYTES, MAX_MODEL_ID_BYTES, MAX_PREDICTION_ID_BYTES, MediaIdError,

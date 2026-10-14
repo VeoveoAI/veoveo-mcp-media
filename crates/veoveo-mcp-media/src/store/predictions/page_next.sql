@@ -3,7 +3,7 @@
 WITH page AS MATERIALIZED (
     SELECT
         tenant, task_id, owner, data_labels, model_id, prediction_id, status_url, status,
-        error, outputs, created_at, updated_at, completed_at
+        error, outputs, created_at, updated_at, completed_at, completion
     FROM media.prediction
     WHERE tenant = $1 AND owner = $2 AND data_labels <@ $3 AND task_id < $4
     ORDER BY task_id DESC
@@ -23,6 +23,7 @@ SELECT
     page.created_at AS "created_at!",
     page.updated_at AS "updated_at!",
     page.completed_at AS "completed_at?",
+    page.completion AS "completion?",
     t.status AS "task_status?: TaskStatus",
     t.error_code AS "task_error_code?",
     t.error_message AS "task_error?",

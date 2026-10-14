@@ -143,8 +143,40 @@ openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
   && VEOVEO_ACCEPTANCE_GATEWAY=http://host.openshell.internal:8080 \
      VEOVEO_ACCEPTANCE_KEY_DIRECTORY=/sandbox/acceptance \
      cargo nextest run --archive-file /sandbox/run/acceptance.tar.zst \
-       --workspace-remap /sandbox/src --extract-to "$run" --run-ignored only'
+       --workspace-remap /sandbox/src --extract-to "$run" --run-ignored only \
+       -E "not test(real_provider)"'
 ```
+
+### Real Provider Through The Installation
+
+One acceptance case bills the real provider once through the whole installation: the
+admin runs a model through the Gateway against Media configured for the real provider,
+downloads every output through Artifact, finds the run's estimate and actual cost in
+the Gateway's daily cost view and the actual one on the Task, and checks that the
+outcome arrived the way the configuration chose: `events` through the installation's
+public origin, `checks` without one. It is ignored by default and runs only with
+`MEDIA_PROVIDER_QUALIFICATION=1`, from the environment's checkout at `/sandbox/src`.
+Configure Media for the real provider first, as the installation's README describes,
+and name the model to run and the configured completion:
+
+```sh
+openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
+  && cargo nextest archive --features testing --test acceptance \
+       --archive-file /sandbox/run/acceptance.tar.zst \
+  && run=/sandbox/run/acceptance-$(date +%s%N) && mkdir -p "$run" \
+  && MEDIA_PROVIDER_QUALIFICATION=1 MEDIA_QUALIFICATION_MODEL=<model> \
+     MEDIA_QUALIFICATION_COMPLETION=<events or checks> \
+     VEOVEO_ACCEPTANCE_GATEWAY=http://host.openshell.internal:8080 \
+     VEOVEO_ACCEPTANCE_KEY_DIRECTORY=/sandbox/acceptance \
+     cargo nextest run --archive-file /sandbox/run/acceptance.tar.zst \
+       --workspace-remap /sandbox/src --extract-to "$run" --run-ignored only \
+       -E "test(real_provider)" --no-capture'
+```
+
+`MEDIA_QUALIFICATION_INPUT` holds the model's input as JSON when the default short
+prompt does not suit the model. The test reads the admin's own cost view at
+`/admin/local/usage/daily`, which the installation's `administrative-reads` rule and
+Media's policy admit.
 
 ## Provider Qualification
 

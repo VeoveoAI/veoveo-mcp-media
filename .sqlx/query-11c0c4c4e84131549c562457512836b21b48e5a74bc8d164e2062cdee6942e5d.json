@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- A page of the viewer's runs after a cursor's Task. The page is chosen first, and only\n-- its runs read their Tasks.\nWITH page AS MATERIALIZED (\n    SELECT\n        tenant, task_id, owner, data_labels, model_id, prediction_id, status_url, status,\n        error, outputs, created_at, updated_at, completed_at\n    FROM media.prediction\n    WHERE tenant = $1 AND owner = $2 AND data_labels <@ $3 AND task_id < $4\n    ORDER BY task_id DESC\n    LIMIT $5\n)\nSELECT\n    page.tenant AS \"tenant!: StoredTenant\",\n    page.task_id AS \"task_id!\",\n    page.owner AS \"owner!: StoredPrincipal\",\n    page.data_labels AS \"data_labels!\",\n    page.model_id AS \"model_id!\",\n    page.prediction_id AS \"prediction_id?\",\n    page.status_url AS \"status_url?\",\n    page.status AS \"status!\",\n    page.error AS \"error?\",\n    page.outputs AS \"outputs!: Json<Vec<GeneratedArtifact>>\",\n    page.created_at AS \"created_at!\",\n    page.updated_at AS \"updated_at!\",\n    page.completed_at AS \"completed_at?\",\n    t.status AS \"task_status?: TaskStatus\",\n    t.error_code AS \"task_error_code?\",\n    t.error_message AS \"task_error?\",\n    t.completed_at AS \"task_completed_at?\"\nFROM page\n-- Each run's Task in core's Task runtime, whose ending the run's status follows.\nLEFT JOIN tasks.task AS t ON t.id = page.task_id AND t.tenant_id = page.tenant\nORDER BY page.task_id DESC\n",
+  "query": "-- One run by its Task, with how its Task ended.\nSELECT\n    p.tenant AS \"tenant: StoredTenant\",\n    p.task_id,\n    p.owner AS \"owner: StoredPrincipal\",\n    p.data_labels,\n    p.model_id,\n    p.prediction_id,\n    p.status_url,\n    p.status,\n    p.error,\n    p.outputs AS \"outputs: Json<Vec<GeneratedArtifact>>\",\n    p.created_at,\n    p.updated_at,\n    p.completed_at,\n    p.completion,\n    t.status AS \"task_status?: TaskStatus\",\n    t.error_code AS \"task_error_code?\",\n    t.error_message AS \"task_error?\",\n    t.completed_at AS \"task_completed_at?\"\nFROM media.prediction AS p\n-- The run's Task in core's Task runtime, whose ending the run's status follows.\nLEFT JOIN tasks.task AS t ON t.id = p.task_id AND t.tenant_id = p.tenant\nWHERE p.tenant = $1 AND p.task_id = $2\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "tenant!: StoredTenant",
+        "name": "tenant: StoredTenant",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "task_id!",
+        "name": "task_id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -27,7 +27,7 @@
       },
       {
         "ordinal": 2,
-        "name": "owner!: StoredPrincipal",
+        "name": "owner: StoredPrincipal",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -38,7 +38,7 @@
       },
       {
         "ordinal": 3,
-        "name": "data_labels!",
+        "name": "data_labels",
         "type_info": "TextArray",
         "origin": {
           "Table": {
@@ -49,7 +49,7 @@
       },
       {
         "ordinal": 4,
-        "name": "model_id!",
+        "name": "model_id",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -60,7 +60,7 @@
       },
       {
         "ordinal": 5,
-        "name": "prediction_id?",
+        "name": "prediction_id",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -71,7 +71,7 @@
       },
       {
         "ordinal": 6,
-        "name": "status_url?",
+        "name": "status_url",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -82,7 +82,7 @@
       },
       {
         "ordinal": 7,
-        "name": "status!",
+        "name": "status",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -93,7 +93,7 @@
       },
       {
         "ordinal": 8,
-        "name": "error?",
+        "name": "error",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -104,7 +104,7 @@
       },
       {
         "ordinal": 9,
-        "name": "outputs!: Json<Vec<GeneratedArtifact>>",
+        "name": "outputs: Json<Vec<GeneratedArtifact>>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -115,7 +115,7 @@
       },
       {
         "ordinal": 10,
-        "name": "created_at!",
+        "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
@@ -126,7 +126,7 @@
       },
       {
         "ordinal": 11,
-        "name": "updated_at!",
+        "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
@@ -137,7 +137,7 @@
       },
       {
         "ordinal": 12,
-        "name": "completed_at?",
+        "name": "completed_at",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
@@ -148,6 +148,17 @@
       },
       {
         "ordinal": 13,
+        "name": "completion",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media.prediction",
+            "name": "completion"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
         "name": "task_status?: TaskStatus",
         "type_info": "Text",
         "origin": {
@@ -158,7 +169,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "task_error_code?",
         "type_info": "Text",
         "origin": {
@@ -169,7 +180,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "task_error?",
         "type_info": "Text",
         "origin": {
@@ -180,7 +191,7 @@
         }
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "task_completed_at?",
         "type_info": "Timestamptz",
         "origin": {
@@ -194,10 +205,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid",
-        "TextArray",
-        "Uuid",
-        "Int8"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -217,8 +225,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "08d4e1535ca1d971ab9ecc4650203e32c02b127bec64b3bbfc960028d5270b44"
+  "hash": "11c0c4c4e84131549c562457512836b21b48e5a74bc8d164e2062cdee6942e5d"
 }

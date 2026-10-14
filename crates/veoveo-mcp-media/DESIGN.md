@@ -132,7 +132,10 @@ one to the other:
 | `VEOVEO_PUBLIC_ORIGIN` set | Events. The installation's public origin holds every server under its own path, and the submission names `{origin}/media/operations/{operation_id}/{token}` as the webhook, such as `https://veoveo.example.com/media/operations/…`. The callback route checks the signature and the signing time, the runtime matches the token's digest and stores each event once, and the first final event wins. |
 | `VEOVEO_PUBLIC_ORIGIN` unset | Checks. The submission names no webhook. Media checks the prediction's status endpoint, the provider's `urls.get`, first after 3 seconds, then every 3 seconds growing by a quarter each time, at most 40 times before the deadline. A status endpoint off the provider's origin is never called. |
 
-Both end at the deadline, two hours after dispatch by default. An expired wait never
+A prediction names its completion, `events` or `checks`, once the run reached the
+provider; the run's operation records the mode it was dispatched with, so a run
+resumed under another configuration keeps it. Both end at the deadline, two hours
+after dispatch by default. An expired wait never
 proves failure: a later report still settles the provider's job, and the run records
 itself unresolved.
 
@@ -215,7 +218,7 @@ registry. Probes never call the provider.
 
 | Table | Holds | Retention |
 |---|---|---|
-| `media.prediction` | One row per run: tenant, Task, owner, labels, model, the provider's prediction and status endpoint, progress, error, stored outputs and times | Until 30 days after the run ended, when the sweep deletes it |
+| `media.prediction` | One row per run: tenant, Task, owner, labels, model, the provider's prediction and status endpoint, its completion, progress, error, stored outputs and times | Until 30 days after the run ended, when the sweep deletes it |
 
 Core's Task runtime holds the Task, its steps, its operations and their events; core's
 usage ledger holds its costs.
@@ -276,5 +279,5 @@ signs the client assertions of its token exchanges.
 | `tests/store.rs` | The `media` schema on PostgreSQL: run progress and its first ending, reads by owner and labels, keyset pages and their cursors, and the sweep |
 | `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private RustFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity; a run whose row the database refuses to update, which reads as its Task ended and which the sweep settles; an estimate from the provider's quote above the base price; a run the provider cannot price |
 | `tests/database_conformance.rs` | Core's database rules over every statement and the schema |
-| `tests/acceptance.rs` | Ignored by default: a run through the Gateway of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run |
+| `tests/acceptance.rs` | Ignored by default: a run through the Gateway of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run; gated by `MEDIA_PROVIDER_QUALIFICATION=1`, one billed run through the installation against the real provider, its outputs read through Artifact, its estimate and actual cost in the Gateway's cost view, and its completion matching the configuration |
 | `tests/provider_qualification.rs` | Ignored by default and gated by `MEDIA_PROVIDER_QUALIFICATION=1`: one billed generation with the real provider through the full flow, on the model with the lowest quote for its input, whose bill the quote covers |

@@ -80,6 +80,7 @@ async fn a_run_stores_its_output_in_artifact_and_records_its_cost() {
             "https://veoveo.ai/formats/media-generation"
         );
         assert_eq!(result["taskId"], task);
+        assert_eq!(result["prediction"]["completion"], "events");
         let prediction = result["prediction"]["predictionId"].as_str().unwrap();
         assert_eq!(
             result["resultUri"],
@@ -548,6 +549,20 @@ async fn a_run_without_a_callback_completes_through_status_checks() {
         assert_eq!(usage.len(), 1, "{completed}");
         assert_eq!(usage[0]["phase"], "actual");
         assert_eq!(harness.fake().submissions(), 1);
+        assert_eq!(
+            completed["result"]["structuredContent"]["prediction"]["completion"],
+            "checks"
+        );
+        let row = harness
+            .store
+            .run(reader().tenant(), TaskId::parse(&task).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            row.summary().unwrap().completion,
+            Some(veoveo_mcp_media::contract::CompletionMode::Checks)
+        );
     })
     .await;
 }

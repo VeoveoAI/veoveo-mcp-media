@@ -54,6 +54,16 @@ impl PredictionStatus {
     }
 }
 
+/// How the provider's outcome reaches a run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Vocabulary)]
+pub enum CompletionMode {
+    /// The provider posts its signed webhook to the run's callback under the
+    /// installation's public origin.
+    Events,
+    /// Media reads the prediction's status endpoint on a bounded schedule.
+    Checks,
+}
+
 /// Why a run failed: the error code its Task records, beside a message that names no
 /// secret.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Vocabulary)]
@@ -94,6 +104,9 @@ pub struct PredictionSummary {
     pub prediction_id: Option<MediaPredictionId>,
     pub model_id: MediaModelId,
     pub status: PredictionStatus,
+    /// How the provider's outcome reaches the run, once the run reached the provider.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion: Option<CompletionMode>,
     /// Why the run failed, when it did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,

@@ -4,7 +4,10 @@ use std::{collections::BTreeSet, time::Duration};
 
 use chrono::{TimeDelta, Utc};
 use veoveo_mcp_media::{
-    contract::{GeneratedArtifact, ListCursor, MediaModelId, MediaPredictionId, PredictionStatus},
+    contract::{
+        CompletionMode, GeneratedArtifact, ListCursor, MediaModelId, MediaPredictionId,
+        PredictionStatus,
+    },
     store::{MediaStore, PredictionPageSize, RunEnding, RunOwner},
 };
 use veoveo_test_fixtures::store::TestDb;
@@ -68,10 +71,16 @@ async fn a_run_moves_through_its_states_and_keeps_its_first_ending() {
                 task,
                 Some(&prediction("p-1")),
                 Some("http://provider.test/api/v3/predictions/p-1/result"),
+                Some(CompletionMode::Checks),
                 now,
             )
             .await
             .unwrap();
+        let processing = store.run(ada.tenant(), task).await.unwrap().unwrap();
+        assert_eq!(
+            processing.summary().unwrap().completion,
+            Some(CompletionMode::Checks)
+        );
         store
             .mark_storing(ada.tenant(), task, &prediction("p-1"), now)
             .await
@@ -131,7 +140,14 @@ async fn reads_show_only_the_owners_runs_whose_labels_they_hold() {
         let task = TaskId::new();
         store.record_run(&ada, task, &model(), now).await.unwrap();
         store
-            .mark_processing(ada.tenant(), task, Some(&prediction("p-2")), None, now)
+            .mark_processing(
+                ada.tenant(),
+                task,
+                Some(&prediction("p-2")),
+                None,
+                None,
+                now,
+            )
             .await
             .unwrap();
         assert!(
