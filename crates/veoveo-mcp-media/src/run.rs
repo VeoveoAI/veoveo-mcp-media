@@ -1,9 +1,11 @@
 //! A `run` Task's work, from its start or from where it parked. The Task checks the input
 //! against the model's schema, reserves the estimated cost, hands the run to the provider
-//! as an operation with a callback URL, and parks until the provider's signed webhook
-//! settles it. The resumed Task streams each output into Artifact as one durable step,
-//! reconciles the provider's bill through a second operation with bounded checks, records
-//! the actual cost, and completes with links to the stored outputs.
+//! as an operation and parks. Under events completion the submission carries a callback
+//! URL and the provider's signed webhook settles the operation; under checks completion
+//! it carries none and bounded checks of the prediction's status endpoint settle it. The
+//! resumed Task streams each output into Artifact as one durable step, reconciles the
+//! provider's bill through a second operation with bounded checks, records the actual
+//! cost, and completes with links to the stored outputs.
 use std::{collections::BTreeSet, io, sync::Arc, time::Duration};
 
 use anyhow::{Context, anyhow};
