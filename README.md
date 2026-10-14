@@ -131,12 +131,14 @@ runs the fake image model, reads the stored output through Artifact's signed dow
 reads the prediction and finds the run's cost on its Task; the member reads the catalog
 and is refused `run`, whose permission carries the `billed` risk.
 
-The tests are ignored by default. With the installation running and the callers' keys
-copied to `/sandbox/acceptance`, run them from a fresh nextest archive extraction:
+The tests are ignored by default and compare the stored bytes with the fake provider's,
+so they build with the `testing` feature. With the installation running and the callers'
+keys copied to `/sandbox/acceptance`, run them from a fresh nextest archive extraction:
 
 ```sh
 openshell sandbox exec vv-mcp-media -- bash -lc 'cd /sandbox/src \
-  && cargo nextest archive --test acceptance --archive-file /sandbox/run/acceptance.tar.zst \
+  && cargo nextest archive --features testing --test acceptance \
+       --archive-file /sandbox/run/acceptance.tar.zst \
   && run=/sandbox/run/acceptance-$(date +%s%N) && mkdir -p "$run" \
   && VEOVEO_ACCEPTANCE_GATEWAY=http://host.openshell.internal:8080 \
      VEOVEO_ACCEPTANCE_KEY_DIRECTORY=/sandbox/acceptance \
