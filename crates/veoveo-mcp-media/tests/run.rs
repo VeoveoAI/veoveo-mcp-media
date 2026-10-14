@@ -180,7 +180,8 @@ async fn a_signed_webhook_settles_once_and_forgeries_and_repeats_change_nothing(
         );
         assert_eq!(harness.task(&task).await["status"], "working");
 
-        // The signed outcome settles the run, and its repeat changes nothing.
+        // The signed outcome settles the run, and its repeat, which carries the
+        // prediction's identity as the provider's first event does, changes nothing.
         assert_eq!(
             harness.fake().complete(&prediction).await.unwrap(),
             StatusCode::NO_CONTENT
@@ -191,7 +192,7 @@ async fn a_signed_webhook_settles_once_and_forgeries_and_repeats_change_nothing(
         assert_eq!(
             harness
                 .fake()
-                .post_event(&prediction, "evt_1", true)
+                .post_event(&prediction, prediction.as_str(), true)
                 .await
                 .unwrap(),
             StatusCode::NO_CONTENT
@@ -562,6 +563,47 @@ async fn a_run_without_a_callback_finishes_on_its_own_when_the_provider_does() {
                 .unwrap()
                 .len(),
             1
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_restarted_fake_provider_repeats_no_identity_the_database_holds() {
+    within(async {
+        let mut harness = harness(true).await;
+        let prediction_of = |view: &Value| {
+            view["result"]["structuredContent"]["prediction"]["predictionId"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+        let first = harness.run(IMAGE_MODEL, prompt()).await;
+        let first = harness
+            .until(&first, |view| view["status"] == "completed")
+            .await;
+
+        // The installation restarts the fake against the same database. A repeated
+        // prediction identity would collide with the first run's row, and a repeated
+        // event identity would read as a repeat and never settle the second run.
+        harness.restart_fake().await;
+        assert_eq!(harness.fake().submissions(), 0);
+        let second = harness.run(IMAGE_MODEL, prompt()).await;
+        let completed = harness
+            .until(&second, |view| view["status"] == "completed")
+            .await;
+        assert_ne!(prediction_of(&first), prediction_of(&completed));
+        assert_eq!(prediction_of(&completed).len(), 32);
+        let operation = harness
+            .runtime()
+            .operation(TaskId::parse(&second).unwrap(), &generation_key())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(operation.state, OperationState::Settled);
+        assert_eq!(
+            status_of(&harness, &second).await,
+            PredictionStatus::Succeeded
         );
     })
     .await;

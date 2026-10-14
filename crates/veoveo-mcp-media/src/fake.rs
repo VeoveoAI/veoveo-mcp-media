@@ -4,7 +4,13 @@
 //! submission's webhook signed with the webhook secret, or keeps it at the prediction's
 //! status endpoint when the submission named no webhook. It serves the outputs, answers
 //! billing searches and deletes predictions on cancellation. Tests can hold outcomes back,
-//! send events by hand and redirect the outputs elsewhere.
+//! send events by hand, redirect the outputs elsewhere and restart the fake.
+//!
+//! Predictions and events carry identities shaped like the provider's, 32 hexadecimal
+//! digits, fresh in every process: a prediction's first event takes the prediction's
+//! identity, as the provider's webhook does, and every later one a new identity. A
+//! restarted fake therefore never repeats an identity an installation's database already
+//! holds.
 use std::{
     collections::BTreeMap,
     net::SocketAddr,
@@ -14,6 +20,9 @@ use std::{
     },
     time::Duration,
 };
+
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use axum::{
     Json, Router,
@@ -109,6 +118,14 @@ struct Held {
     prediction: Prediction,
     webhook: Option<Url>,
     billed: bool,
+    /// Whether an event of the prediction was posted, so the next one takes a fresh
+    /// identity instead of the prediction's.
+    posted: bool,
+}
+
+/// A fresh identity shaped like the provider's: 32 hexadecimal digits.
+fn fresh_identity() -> String {
+    Uuid::now_v7().simple().to_string()
 }
 
 struct FakeState {
@@ -116,8 +133,8 @@ struct FakeState {
     secret: String,
     deliver: AtomicBool,
     delay: Duration,
-    next: AtomicU64,
-    events: AtomicU64,
+    /// The identity the next submission takes instead of a fresh one.
+    next_prediction: Mutex<Option<String>>,
     submissions: AtomicU64,
     cancellations: AtomicU64,
     status_reads: AtomicU64,
@@ -130,7 +147,13 @@ struct FakeState {
 #[derive(Clone)]
 pub struct FakeProvider {
     state: Arc<FakeState>,
+    config: FakeProviderConfig,
+    stop: CancellationToken,
+    server: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
+
+/// How long a stopping fake waits for its open requests.
+const STOP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How a fake provider starts.
 #[derive(Debug, Clone)]
@@ -146,18 +169,19 @@ pub struct FakeProviderConfig {
 }
 
 impl FakeProvider {
-    /// Start the fake on `config.listen` and serve until the process ends.
-    pub async fn start(config: FakeProviderConfig) -> std::io::Result<Self> {
+    /// Start the fake on `config.listen` and serve until the process ends or the fake
+    /// restarts.
+    pub async fn start(mut config: FakeProviderConfig) -> std::io::Result<Self> {
         let listener = tokio::net::TcpListener::bind(config.listen).await?;
         let address = listener.local_addr()?;
+        config.listen = address;
         let base = Url::parse(&format!("http://{address}")).expect("a loopback URL");
         let state = Arc::new(FakeState {
             base,
-            secret: config.webhook_secret,
+            secret: config.webhook_secret.clone(),
             deliver: AtomicBool::new(config.deliver),
             delay: config.delay,
-            next: AtomicU64::new(1),
-            events: AtomicU64::new(1),
+            next_prediction: Mutex::new(None),
             submissions: AtomicU64::new(0),
             cancellations: AtomicU64::new(0),
             status_reads: AtomicU64::new(0),
@@ -173,10 +197,43 @@ impl FakeProvider {
             .route("/api/v3/{*model}", post(submit))
             .route("/outputs/{prediction}/{file}", get(output))
             .with_state(state.clone());
-        tokio::spawn(async move {
-            let _ = axum::serve(listener, router).await;
+        let stop = CancellationToken::new();
+        let server = tokio::spawn({
+            let stop = stop.clone();
+            async move {
+                let _ = axum::serve(listener, router)
+                    .with_graceful_shutdown(stop.cancelled_owned())
+                    .await;
+            }
         });
-        Ok(Self { state })
+        Ok(Self {
+            state,
+            config,
+            stop,
+            server: Arc::new(Mutex::new(Some(server))),
+        })
+    }
+
+    /// Stop this fake and start a new one on the same address with the same settings and
+    /// none of its predictions, as a restarted process does. The stop closes every open
+    /// connection, so nothing reaches the old fake afterward.
+    pub async fn restarted(self) -> std::io::Result<Self> {
+        self.stop.cancel();
+        let server = self.server.lock().expect("fake server lock").take();
+        if let Some(server) = server {
+            let _ = tokio::time::timeout(STOP_TIMEOUT, server).await;
+        }
+        Self::start(self.config.clone()).await
+    }
+
+    /// Give the next submission `prediction` instead of a fresh identity, as a provider
+    /// that repeats an identity would.
+    pub fn name_next_prediction(&self, prediction: &MediaPredictionId) {
+        *self
+            .state
+            .next_prediction
+            .lock()
+            .expect("fake identity lock") = Some(prediction.as_str().to_owned());
     }
 
     /// The fake's API origin, which Media's provider address names.
@@ -228,10 +285,11 @@ impl FakeProvider {
         self.state.status_reads.load(Ordering::SeqCst)
     }
 
-    /// Finish `prediction` and post its outcome now, under a fresh event identity.
+    /// Finish `prediction` and post its outcome now: under the prediction's identity the
+    /// first time, as the provider does, and under a fresh identity after that.
     pub async fn complete(&self, prediction: &MediaPredictionId) -> Result<StatusCode, String> {
         let event = finish(&self.state, prediction.as_str()).ok_or("no such prediction")?;
-        let event_id = self.next_event();
+        let event_id = next_event(&self.state, prediction.as_str());
         self.post(&event, &event_id, true).await
     }
 
@@ -251,10 +309,6 @@ impl FakeProvider {
             .cloned()
             .ok_or("no such prediction")?;
         self.post(&held, event_id, signed).await
-    }
-
-    fn next_event(&self) -> String {
-        format!("evt_{}", self.state.events.fetch_add(1, Ordering::SeqCst))
     }
 
     async fn post(&self, held: &Held, event_id: &str, signed: bool) -> Result<StatusCode, String> {
@@ -290,6 +344,19 @@ fn finish(state: &FakeState, prediction: &str) -> Option<Held> {
         entry.billed = true;
     }
     Some(entry.clone())
+}
+
+/// The identity of the next event the fake posts for `prediction`: the prediction's own
+/// the first time, a fresh one after that.
+fn next_event(state: &FakeState, prediction: &str) -> String {
+    let mut held = state.predictions.lock().expect("fake predictions lock");
+    match held.get_mut(prediction) {
+        Some(entry) if !entry.posted => {
+            entry.posted = true;
+            prediction.to_owned()
+        }
+        _ => fresh_identity(),
+    }
 }
 
 async fn post_webhook(
@@ -363,7 +430,12 @@ async fn submit(
         .into_response();
     }
     state.submissions.fetch_add(1, Ordering::SeqCst);
-    let id = format!("fake-{}", state.next.fetch_add(1, Ordering::SeqCst));
+    let id = state
+        .next_prediction
+        .lock()
+        .expect("fake identity lock")
+        .take()
+        .unwrap_or_else(fresh_identity);
     let mut status_url = state.base.clone();
     status_url
         .path_segments_mut()
@@ -391,6 +463,7 @@ async fn submit(
                 prediction: prediction.clone(),
                 webhook: query.webhook,
                 billed: false,
+                posted: false,
             },
         );
     if state.deliver.load(Ordering::SeqCst) {
@@ -403,7 +476,7 @@ async fn submit(
             if let Some(held) = finish(&state, &id)
                 && held.webhook.is_some()
             {
-                let event_id = format!("evt_{}", state.events.fetch_add(1, Ordering::SeqCst));
+                let event_id = next_event(&state, &id);
                 if let Err(error) = post_webhook(&state, &held, &event_id, true).await {
                     eprintln!("the fake provider could not post its webhook: {error}");
                 }

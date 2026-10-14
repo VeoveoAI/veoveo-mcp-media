@@ -399,6 +399,16 @@ impl Harness {
         }
     }
 
+    /// Restart the fake provider on its address, as the installation restarts its
+    /// process: the new fake holds none of the old one's predictions.
+    pub async fn restart_fake(&mut self) {
+        let fake = self
+            .fake
+            .take()
+            .expect("the harness runs the fake provider");
+        self.fake = Some(fake.restarted().await.unwrap());
+    }
+
     /// The fake provider of a harness that runs one.
     pub fn fake(&self) -> &FakeProvider {
         self.fake
