@@ -108,7 +108,7 @@ veoveo-sdk-rust = { workspace = true, features = ["server", "testing", "client-c
 # The acceptance tests call Media and Artifact through the Gateway as an MCP client.
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
 # `database-conformance` holds the crate's queries and schema to core's database rules.
-veoveo-test-fixtures = { workspace = true, features = ["store", "database-conformance"] }
+veoveo-fixtures = { workspace = true, features = ["store", "database-conformance"] }
 reqwest = { workspace = true, features = ["rustls-no-provider", "json"] }
 tokio = { workspace = true, features = ["full"] }
 

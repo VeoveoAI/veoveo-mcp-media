@@ -11,6 +11,7 @@ use std::{collections::BTreeSet, future::Future, net::SocketAddr, sync::Arc, tim
 use secrecy::SecretString;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
+use veoveo_fixtures::store::TestDb;
 use veoveo_mcp_artifact::{
     contract::ArtifactPermission,
     mcp::{
@@ -43,7 +44,6 @@ use veoveo_sdk_rust::{
 };
 use veoveo_store::PlatformStore;
 use veoveo_task::{Instance, TaskRuntime, TaskSnapshot, TaskStatus};
-use veoveo_test_fixtures::store::TestDb;
 use veoveo_types::{ServerSlug, TaskId};
 
 use seaweedfs::TestSeaweedFs;

@@ -12,22 +12,22 @@ publish = false
 
 [workspace.dependencies]
 # veoveo-core, pinned to one revision for every core crate.
-veoveo-store = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "af12a7f52e5e7a445bfc4dca7bac853d5c3bebc9" }
-veoveo-test-fixtures = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "af12a7f52e5e7a445bfc4dca7bac853d5c3bebc9" }
-veoveo-types = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "af12a7f52e5e7a445bfc4dca7bac853d5c3bebc9" }
-veoveo-audit = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "af12a7f52e5e7a445bfc4dca7bac853d5c3bebc9" }
-veoveo-audit-contract = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "af12a7f52e5e7a445bfc4dca7bac853d5c3bebc9" }
-veoveo-task = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "af12a7f52e5e7a445bfc4dca7bac853d5c3bebc9" }
-veoveo-usage = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "af12a7f52e5e7a445bfc4dca7bac853d5c3bebc9" }
+veoveo-audit = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "9a6b3ff95469ff19f9ccb513421a57ba6751aa9e" }
+veoveo-audit-contract = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "9a6b3ff95469ff19f9ccb513421a57ba6751aa9e" }
+veoveo-fixtures = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "9a6b3ff95469ff19f9ccb513421a57ba6751aa9e" }
+veoveo-store = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "9a6b3ff95469ff19f9ccb513421a57ba6751aa9e" }
+veoveo-task = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "9a6b3ff95469ff19f9ccb513421a57ba6751aa9e" }
+veoveo-types = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "9a6b3ff95469ff19f9ccb513421a57ba6751aa9e" }
+veoveo-usage = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "9a6b3ff95469ff19f9ccb513421a57ba6751aa9e" }
 # RFC 7523 client assertions for the acceptance callers.
 # The Rust SDK for Veoveo MCP servers: the contract feature for declarations and typed
 # calls, the server feature for hosting, registration, Task work, operations, usage and
 # calls to other servers.
-veoveo-sdk-rust = { git = "https://github.com/VeoveoAI/veoveo-sdk-rust", rev = "7afb2e85dac6d4f17ab84f3ca7f8ddcd035af350", default-features = false }
+veoveo-sdk-rust = { git = "https://github.com/VeoveoAI/veoveo-sdk-rust", rev = "523c7ace42660a20b213bef7acb31398813fec97", default-features = false }
 # Artifact, where Media stores what a provider generates: its `client` feature in the
 # server, its hosted server in the tests that run Artifact in process. Artifact pins the
 # same SDK revision, so one SDK serves both.
-veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "56daf63b60a4382dd59b7e5029a2e98c0f5d103b", default-features = false }
+veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "31cd9bb54d89f7df8b4c338f316cf61a830f6eea", default-features = false }
 
 anyhow = "=1.0.104"
 # The fake provider's HTTP server and the server's public callback route.
