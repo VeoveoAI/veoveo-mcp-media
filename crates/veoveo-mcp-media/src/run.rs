@@ -22,7 +22,6 @@ use veoveo_mcp_artifact::{
         MediaType, ObjectSize, RetentionDays,
     },
 };
-use veoveo_platform_store::TenantId as StoredTenant;
 use veoveo_sdk_rust::{
     durable_tasks::{TaskContext, TaskStop, TaskWorkError, TaskWorker, mcp_task_completion},
     hosting::product_result,
@@ -31,7 +30,8 @@ use veoveo_sdk_rust::{
         UsageKindDeclaration, UsageKinds, UsageUnit,
     },
 };
-use veoveo_task_runtime::{
+use veoveo_store::TenantId as StoredTenant;
+use veoveo_task::{
     CheckObservation, CheckSchedule, Completion, ExternalJobId, Operation, OperationCalls,
     OperationSpec, StepDispatch, StepKey, Submission, TaskError, TaskFailure, TaskTransition,
     WaitOutcome,

@@ -13,7 +13,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
-use veoveo_platform_store::CursorScope;
+use veoveo_store::CursorScope;
 
 use crate::{
     contract::{

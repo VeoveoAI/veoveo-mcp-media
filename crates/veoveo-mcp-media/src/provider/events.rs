@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use veoveo_sdk_rust::hosting::operations::{
     ProviderEvent, ProviderEvents, ProviderRejection, ProviderRequest,
 };
-use veoveo_task_runtime::{
+use veoveo_task::{
     CheckObservation, ExternalJobId, Operation, OperationEventId, OperationKey, ProviderName,
 };
 

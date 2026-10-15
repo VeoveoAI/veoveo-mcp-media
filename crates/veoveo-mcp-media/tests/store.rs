@@ -9,7 +9,7 @@ use veoveo_mcp_media::{
     contract::{CompletionMode, GeneratedArtifact, MediaModelId, MediaPredictionId},
     store::{MediaStore, MediaStoreError, SWEEP_BATCH, stored_tenant},
 };
-use veoveo_platform_store::TenantId as StoredTenant;
+use veoveo_store::TenantId as StoredTenant;
 use veoveo_test_fixtures::store::TestDb;
 use veoveo_types::{ResourceUri, TaskId, TenantId};
 

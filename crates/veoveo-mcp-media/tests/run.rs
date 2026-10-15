@@ -34,7 +34,7 @@ use veoveo_sdk_rust::{
     hosting::testing::{self, MESH_PROFILE},
     registration::ResourceIndicator,
 };
-use veoveo_task_runtime::{OperationState, TaskStatus};
+use veoveo_task::{OperationState, TaskStatus};
 use veoveo_types::{InvocationMode, TaskId};
 
 fn prompt() -> Value {
@@ -46,7 +46,7 @@ fn expected(length: u64) -> Vec<u8> {
 }
 
 /// The test user as the owner of their Tasks, as Media reads their predictions.
-fn owner() -> veoveo_task_runtime::TaskOwner {
+fn owner() -> veoveo_task::TaskOwner {
     identity::task_owner(&forwarded_user()).unwrap()
 }
 
@@ -510,7 +510,7 @@ async fn a_run_without_a_callback_completes_through_status_checks() {
             .unwrap();
         assert!(matches!(
             operation.completion,
-            veoveo_task_runtime::Completion::Checks(_)
+            veoveo_task::Completion::Checks(_)
         ));
         // The runtime's due pass wakes the run for its checks; it sleeps at most 5 s.
         tokio::time::timeout(Duration::from_secs(15), async {

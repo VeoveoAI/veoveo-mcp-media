@@ -40,7 +40,7 @@ use veoveo_mcp_media::{
     contract::MediaModelId,
     run::{RunCompletion, RunSettings},
 };
-use veoveo_task_runtime::CheckSchedule;
+use veoveo_task::CheckSchedule;
 
 /// How many of the lowest base prices the qualification quotes for its input.
 const QUOTED_CANDIDATES: usize = 20;

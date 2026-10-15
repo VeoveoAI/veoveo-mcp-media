@@ -19,7 +19,7 @@ use veoveo_sdk_rust::{
     subscriptions::SubscriptionHub,
     usage::UsageLedger,
 };
-use veoveo_task_runtime::{TaskRuntime, TaskRuntimeConfig};
+use veoveo_task::{TaskRuntime, TaskRuntimeConfig};
 
 use crate::{
     catalog::Catalog,

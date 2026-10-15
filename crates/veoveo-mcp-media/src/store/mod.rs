@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 use sqlx::types::Json;
 use uuid::Uuid;
-use veoveo_platform_store::{PlatformStore, TenantId as StoredTenant};
+use veoveo_store::{PlatformStore, TenantId as StoredTenant};
 use veoveo_types::{TaskId, TenantId};
 
 use crate::contract::{CompletionMode, GeneratedArtifact, MediaModelId, MediaPredictionId};
@@ -47,7 +47,7 @@ impl MediaStoreError {
 
 /// The stored identity of a tenant, as the identity schema derives it.
 pub fn stored_tenant(tenant: &TenantId) -> Result<StoredTenant, MediaStoreError> {
-    veoveo_platform_store::deterministic_tenant_id(tenant.as_str())
+    veoveo_store::deterministic_tenant_id(tenant.as_str())
         .map_err(|_| MediaStoreError::InvalidTenant)
 }
 

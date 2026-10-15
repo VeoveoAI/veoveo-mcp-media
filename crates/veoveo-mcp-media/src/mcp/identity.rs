@@ -2,9 +2,9 @@
 //! Task owner a run starts for and every read of the caller's runs selects by, and the
 //! stored tenant of Media's rows.
 use rmcp::ErrorData as McpError;
-use veoveo_platform_store::TenantId as StoredTenant;
 use veoveo_sdk_rust::GatewayInternalIdentity;
-use veoveo_task_runtime::{TaskOwner, TaskSurface};
+use veoveo_store::TenantId as StoredTenant;
+use veoveo_task::{TaskOwner, TaskSurface};
 
 /// The stored tenant of the caller's runs.
 pub fn tenant(identity: &GatewayInternalIdentity) -> Result<StoredTenant, McpError> {
@@ -21,8 +21,8 @@ pub fn task_owner(identity: &GatewayInternalIdentity) -> Result<TaskOwner, McpEr
     Ok(TaskOwner {
         principal_key: actor.id.clone(),
         principal_kind: match actor.kind {
-            veoveo_sdk_rust::PrincipalKind::User => veoveo_task_runtime::PrincipalKind::User,
-            veoveo_sdk_rust::PrincipalKind::Service => veoveo_task_runtime::PrincipalKind::Service,
+            veoveo_sdk_rust::PrincipalKind::User => veoveo_task::PrincipalKind::User,
+            veoveo_sdk_rust::PrincipalKind::Service => veoveo_task::PrincipalKind::Service,
         },
         issuer: actor.issuer.clone(),
         subject: actor.subject.clone(),

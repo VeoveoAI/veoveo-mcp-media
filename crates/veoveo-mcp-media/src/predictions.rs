@@ -6,8 +6,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
-use veoveo_platform_store::{CursorScope, KeysetCursor};
-use veoveo_task_runtime::{
+use veoveo_store::{CursorScope, KeysetCursor};
+use veoveo_task::{
     TaskError, TaskOwner, TaskPageCursor, TaskPageOrder, TaskRuntime, TaskSnapshot, TaskStatus,
 };
 use veoveo_types::TaskId;

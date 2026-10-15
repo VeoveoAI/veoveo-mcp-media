@@ -31,7 +31,6 @@ use veoveo_mcp_media::{
     run::{self, MediaUsage, MediaWork, RunCompletion, RunSettings},
     store::MediaStore,
 };
-use veoveo_platform_store::PlatformStore;
 use veoveo_sdk_rust::{
     durable_tasks::{CallbackUrls, DurableTasks, TaskWorker},
     hosting::{
@@ -42,7 +41,8 @@ use veoveo_sdk_rust::{
     subscriptions::SubscriptionHub,
     usage::{TASK_USAGE_META_KEY, UsageLedger},
 };
-use veoveo_task_runtime::{Instance, TaskRuntime, TaskSnapshot, TaskStatus};
+use veoveo_store::PlatformStore;
+use veoveo_task::{Instance, TaskRuntime, TaskSnapshot, TaskStatus};
 use veoveo_test_fixtures::store::TestDb;
 use veoveo_types::{ServerSlug, TaskId};
 
@@ -171,7 +171,7 @@ pub async fn harness_with(
     let completion = match completion {
         Completion::Events => RunCompletion::Events,
         Completion::Checks => RunCompletion::Checks(
-            veoveo_task_runtime::CheckSchedule::new(
+            veoveo_task::CheckSchedule::new(
                 Duration::from_millis(200),
                 Duration::from_millis(200),
                 1.2,
@@ -183,7 +183,7 @@ pub async fn harness_with(
     let settings = RunSettings {
         completion,
         generation_timeout: Duration::from_secs(120),
-        billing_schedule: veoveo_task_runtime::CheckSchedule::new(
+        billing_schedule: veoveo_task::CheckSchedule::new(
             Duration::from_millis(100),
             Duration::from_millis(200),
             1.5,

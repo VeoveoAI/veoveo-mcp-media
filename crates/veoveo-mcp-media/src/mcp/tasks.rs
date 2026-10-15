@@ -20,7 +20,7 @@ use veoveo_sdk_rust::{
     },
     hosting::gateway_identity,
 };
-use veoveo_task_runtime::{CreateTask, RecoveryClass, TaskError, TaskRuntime};
+use veoveo_task::{CreateTask, RecoveryClass, TaskError, TaskRuntime};
 use veoveo_types::TaskId;
 
 use crate::{
@@ -146,7 +146,7 @@ impl DurableTaskService for MediaTasks {
     /// carries the cancellation to the provider. Its prediction reads as its Task does.
     async fn cancel_task(&self, caller: &Self::Caller, task_id: String) -> Result<(), McpError> {
         let unknown = || McpError::invalid_params("unknown task id", None);
-        let task = veoveo_task_runtime::parse_task_id(&task_id).map_err(|_| unknown())?;
+        let task = veoveo_task::parse_task_id(&task_id).map_err(|_| unknown())?;
         self.runtime
             .for_owner(&identity::task_owner(caller)?)
             .cancel(task)

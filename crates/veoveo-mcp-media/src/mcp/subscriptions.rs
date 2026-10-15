@@ -8,12 +8,12 @@ use std::sync::Arc;
 
 use futures::StreamExt as _;
 use rmcp::{ErrorData as McpError, RoleServer, service::RequestContext};
-use veoveo_platform_store::{ChangeSignal, ChangeStream, Channel, ServerSchema};
 use veoveo_sdk_rust::{
     hosting::{ResourceSubscriptions, gateway_identity},
     subscriptions::SubscriptionHub,
 };
-use veoveo_task_runtime::TaskRuntime;
+use veoveo_store::{ChangeSignal, ChangeStream, Channel, ServerSchema};
+use veoveo_task::TaskRuntime;
 use veoveo_types::{ResourceAddress, TaskId};
 
 use crate::{contract::MediaResource, predictions::Predictions, store::MediaStore};
