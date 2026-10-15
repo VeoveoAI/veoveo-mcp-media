@@ -1,2 +1,6 @@
 target
 .git
+.env
+.env.*
+**/.env
+**/.env.*
