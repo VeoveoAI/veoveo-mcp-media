@@ -104,8 +104,7 @@ veoveo-audit-contract.workspace = true
 # outputs through.
 veoveo-mcp-artifact = { workspace = true, features = ["server", "client"] }
 veoveo-platform-store.workspace = true
-veoveo-sdk-rust = { workspace = true, features = ["server", "testing"] }
-veoveo-oauth-client.workspace = true
+veoveo-sdk-rust = { workspace = true, features = ["server", "testing", "client-credentials"] }
 # The acceptance tests call Media and Artifact through the Gateway as an MCP client.
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
 # `database-conformance` holds the crate's queries and schema to core's database rules.
