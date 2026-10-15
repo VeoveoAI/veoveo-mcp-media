@@ -23,11 +23,11 @@ veoveo-usage = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "c0c8254
 # The Rust SDK for Veoveo MCP servers: the contract feature for declarations and typed
 # calls, the server feature for hosting, registration, Task work, operations, usage and
 # calls to other servers.
-veoveo-sdk-rust = { git = "https://github.com/VeoveoAI/veoveo-sdk-rust", rev = "8ac87451ca25fe0f6f8b956c67cb072022078f55", default-features = false }
+veoveo-sdk-rust = { git = "https://github.com/VeoveoAI/veoveo-sdk-rust", rev = "e8b2dcc88985f29fc82f5b5c634d24f3142577c5", default-features = false }
 # Artifact, where Media stores what a provider generates: its `client` feature in the
 # server, its hosted server in the tests that run Artifact in process. Artifact pins the
 # same SDK revision, so one SDK serves both.
-veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "1349067e26424893ec7ad5a2ef6c1efe5781945d", default-features = false }
+veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "43efe90c843ebfa2b3b1cdb84de43ceef6c8220a", default-features = false }
 
 anyhow = "=1.0.104"
 # The fake provider's HTTP server and the server's public callback route.
@@ -40,7 +40,7 @@ hex = "=0.4.3"
 # The provider signs its webhooks with HMAC-SHA256.
 hmac = "0.13.0"
 # Model input admission against the provider's published JSON Schema.
-jsonschema = { version = "0.58.6", default-features = false }
+jsonschema = { version = "=0.58.6", default-features = false }
 # The SDK's HTTP client release; the provider client and the tests share it.
 reqwest = { version = "=0.13.5", default-features = false }
 # The rmcp fork the SDK pins; Media's tool router uses its macros.
