@@ -21,7 +21,7 @@ contract = [
     "dep:serde",
     "dep:serde_json",
     "dep:thiserror",
-    "dep:veoveo-sdk-rust",
+    "dep:veoveo-hub-sdk",
     "dep:veoveo-types",
 ]
 # The hosted server: MCP through the SDK, generations as durable Tasks parked on provider
@@ -30,7 +30,7 @@ contract = [
 server = [
     "contract",
     "chrono/clock",
-    "veoveo-sdk-rust/server",
+    "veoveo-hub-sdk/server",
     "dep:anyhow",
     "dep:axum",
     "dep:bytes",
@@ -70,7 +70,7 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
-veoveo-sdk-rust = { workspace = true, features = ["contract"], optional = true }
+veoveo-hub-sdk = { workspace = true, features = ["contract"], optional = true }
 veoveo-types = { workspace = true, optional = true }
 
 anyhow = { workspace = true, optional = true }
@@ -104,8 +104,8 @@ veoveo-audit-contract.workspace = true
 # outputs through.
 veoveo-mcp-artifact = { workspace = true, features = ["server", "client"] }
 veoveo-store.workspace = true
-veoveo-sdk-rust = { workspace = true, features = ["server", "testing", "client-credentials"] }
-# The acceptance tests call Media and Artifact through the Gateway as an MCP client.
+veoveo-hub-sdk = { workspace = true, features = ["server", "testing", "client-credentials"] }
+# The acceptance tests call Media and Artifact through the Hub as an MCP client.
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
 # `database-conformance` holds the crate's queries and schema to core's database rules.
 veoveo-fixtures = { workspace = true, features = ["store", "database-conformance"] }

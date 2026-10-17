@@ -21,8 +21,8 @@ records the run's cost in core's usage ledger. The design is
 A consumer depends on the crate with `default-features = false, features = ["contract"]`
 by Git revision. `MediaProvider` names the server, and `ModelsRequest`,
 `ModelSchemaRequest` and `RunRequest` are `ToolCall`s with typed results, so a server
-that declares uses of Media's permissions calls Media through the Gateway with the SDK's
-`GatewayClient`; `run` is a `TaskToolCall` whose handle resolves with the
+that declares uses of Media's permissions calls Media through the Hub with the SDK's
+`HubClient`; `run` is a `TaskToolCall` whose handle resolves with the
 `GenerationResult`.
 
 ## Database
@@ -40,7 +40,7 @@ CARGO_TARGET_DIR=<empty directory> cargo sqlx prepare --workspace -- --all-targe
 ## Running
 
 The server takes the registration settings every server takes (`VEOVEO_PUBLIC_BASE_URL`,
-`VEOVEO_GATEWAY_ISSUER`, `VEOVEO_REGISTRATION_SECRET`, `VEOVEO_KEY_DIRECTORY`) and its
+`VEOVEO_HUB_ISSUER`, `VEOVEO_REGISTRATION_SECRET`, `VEOVEO_KEY_DIRECTORY`) and its
 provider settings: `MEDIA_PROVIDER_URL`, which has no default, `MEDIA_PROVIDER_API_KEY`
 and `MEDIA_PROVIDER_WEBHOOK_SECRET`. The installation's public origin,
 `VEOVEO_PUBLIC_ORIGIN` such as `https://veoveo.example.com`, holds every server under
@@ -71,7 +71,7 @@ A local installation from
 [veoveo-template-installation](https://github.com/VeoveoAI/veoveo-template-installation)
 runs this image, under its own layer, as the Compose service `vv-mcp-media`, which
 works in the installation's Lore repository at `/sandbox/src`. The environment reaches
-the Gateway at `vv-gateway.internal:8080`, PostgreSQL at `vv-postgres.internal:5432` and
+the Hub at `vv-hub.internal:8080`, PostgreSQL at `vv-postgres.internal:5432` and
 the object store at `vv-seaweedfs.internal:9000`, where Media sends each output's bytes
 to the URLs Artifact signs. It also joins the network where the installation's edge
 answers as `media-provider.internal` for the real provider. The fake provider runs in
@@ -106,7 +106,7 @@ docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
   && cargo build --locked --target-dir /sandbox/target-serve --bin veoveo-mcp-media \
   && set -a && . /sandbox/state/media.env && set +a \
   && VEOVEO_PUBLIC_BASE_URL=http://vv-mcp-media.internal:8802 \
-     VEOVEO_GATEWAY_ISSUER=http://vv-gateway.internal:8080 \
+     VEOVEO_HUB_ISSUER=http://vv-hub.internal:8080 \
      VEOVEO_KEY_DIRECTORY=/sandbox/media/keys \
      VEOVEO_ALLOW_LOOPBACK_HOSTS=true \
      MEDIA_PROVIDER_URL=http://127.0.0.1:8803 \
@@ -118,13 +118,13 @@ installation whose tunnel carries its public origin sets `VEOVEO_PUBLIC_ORIGIN` 
 `https` origin, such as `https://veoveo.example.com`; Media then accepts requests for the
 origin's host, and the provider posts each outcome to
 `https://veoveo.example.com/media/operations/…`.
-Media registers before it listens, and the Gateway reaches it as
+Media registers before it listens, and the Hub reaches it as
 `http://vv-mcp-media.internal:8802/media/mcp`. Media removes its registration when it
 receives SIGTERM or Ctrl-C.
 
 ## Acceptance
 
-`tests/acceptance.rs` calls Media through the Gateway as the installation's
+`tests/acceptance.rs` calls Media through the Hub as the installation's
 `acceptance-admin` and `acceptance-member` callers against the fake provider: the admin
 runs the fake image model, reads the stored output through Artifact's signed download,
 reads the prediction and finds the run's cost on its Task; the member reads the catalog
@@ -136,7 +136,7 @@ keys copied to `/sandbox/acceptance`, run them:
 
 ```sh
 docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
-  && VEOVEO_ACCEPTANCE_GATEWAY=http://vv-gateway.internal:8080 \
+  && VEOVEO_ACCEPTANCE_HUB=http://vv-hub.internal:8080 \
      VEOVEO_ACCEPTANCE_KEY_DIRECTORY=/sandbox/acceptance \
      cargo nextest run --features testing --test acceptance --run-ignored only \
        -E "not test(real_provider)"'
@@ -145,9 +145,9 @@ docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
 ### Real Provider Through The Installation
 
 One acceptance case bills the real provider once through the whole installation: the
-admin runs a model through the Gateway against Media configured for the real provider,
+admin runs a model through the Hub against Media configured for the real provider,
 downloads every output through Artifact, finds the run's estimate and actual cost in
-the Gateway's daily cost view and the actual one on the Task, and checks that the
+the Hub's daily cost view and the actual one on the Task, and checks that the
 outcome arrived the way the configuration chose: `events` through the installation's
 public origin, `checks` without one. It is ignored by default and runs only with
 `MEDIA_PROVIDER_QUALIFICATION=1`, from the environment's checkout at `/sandbox/src`.
@@ -158,7 +158,7 @@ and name the model to run and the configured completion:
 docker compose exec vv-mcp-media bash -lc 'cd /sandbox/src \
   && MEDIA_PROVIDER_QUALIFICATION=1 MEDIA_QUALIFICATION_MODEL=<model> \
      MEDIA_QUALIFICATION_COMPLETION=<events or checks> \
-     VEOVEO_ACCEPTANCE_GATEWAY=http://vv-gateway.internal:8080 \
+     VEOVEO_ACCEPTANCE_HUB=http://vv-hub.internal:8080 \
      VEOVEO_ACCEPTANCE_KEY_DIRECTORY=/sandbox/acceptance \
      cargo nextest run --features testing --test acceptance --run-ignored only \
        -E "test(real_provider)" --no-capture'

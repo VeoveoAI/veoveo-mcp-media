@@ -1,7 +1,7 @@
-//! Registration with the Gateway: Media's key, its declarations, and the client that
+//! Registration with the Hub: Media's key, its declarations, and the client that
 //! removes the registration when Media stops.
 use anyhow::{Context, Result};
-use veoveo_sdk_rust::registration::{
+use veoveo_hub_sdk::registration::{
     ClientMetadata, RegistrationDeclaration,
     client::{KeyDirectory, Registration, RegistrationClient},
     statement::ServerKeyPair,
@@ -16,7 +16,7 @@ pub(super) struct Registered {
     pub registration: Registration,
     pub metadata: ClientMetadata,
     pub key: ServerKeyPair,
-    /// The HTTP client that reached the Gateway, which also fetches the Gateway's token
+    /// The HTTP client that reached the Hub, which also fetches the Hub's token
     /// keys when a forwarded token names a key the registration lacks.
     pub http: reqwest::Client,
 }
@@ -34,9 +34,9 @@ pub(super) async fn register(
     let http = reqwest::Client::builder()
         .build()
         .context("building the registration HTTP client")?;
-    let endpoint = RegistrationClient::discover(&http, &args.gateway_issuer)
+    let endpoint = RegistrationClient::discover(&http, &args.hub_issuer)
         .await
-        .context("discovering the Gateway's registration endpoint")?;
+        .context("discovering the Hub's registration endpoint")?;
     let client = RegistrationClient::new(
         http.clone(),
         endpoint,
@@ -47,8 +47,8 @@ pub(super) async fn register(
     let registration = client
         .register()
         .await
-        .context("registering Media with the Gateway")?;
-    tracing::info!(client_id = %registration.client_id(), "registered with the Gateway");
+        .context("registering Media with the Hub")?;
+    tracing::info!(client_id = %registration.client_id(), "registered with the Hub");
     // The same key signs the client assertions of Media's token exchanges.
     let key = keys
         .load_or_generate()

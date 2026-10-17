@@ -1,19 +1,19 @@
 //! The one table that says which permission each of Media's targets requires. It builds
-//! the `ai.veoveo/authorization` declaration the Gateway evaluates, with the permissions
+//! the `ai.veoveo/authorization` declaration the Hub evaluates, with the permissions
 //! Media uses on Artifact, and every handler checks the same declaration against the
-//! permissions the Gateway granted.
+//! permissions the Hub granted.
 use std::sync::LazyLock;
 
 use rmcp::{ErrorData as McpError, RoleServer, service::RequestContext};
-use veoveo_mcp_artifact::contract::ArtifactPermission;
-use veoveo_sdk_rust::{
-    GatewayInternalIdentity, LocalToolName, PromptName,
-    hosting::gateway_identity,
+use veoveo_hub_sdk::{
+    HubInternalIdentity, LocalToolName, PromptName,
+    hosting::hub_identity,
     registration::{
         AuthorizationBuilder, AuthorizationDeclaration, DeclarationError, RequirementTarget,
     },
     server_contract::McpServerContract,
 };
+use veoveo_mcp_artifact::contract::ArtifactPermission;
 use veoveo_types::{PermissionName, ResourceTemplateUri, ResourceUri};
 
 use super::setup::MediaContract;
@@ -61,7 +61,7 @@ pub(crate) const USES: &[ArtifactPermission] = &[
     ArtifactPermission::ArtifactsWrite,
 ];
 
-/// Media's authorization declaration, checked against its namespace as the Gateway
+/// Media's authorization declaration, checked against its namespace as the Hub
 /// checks it.
 pub static AUTHORIZATION: LazyLock<AuthorizationDeclaration> =
     LazyLock::new(|| declaration().expect("Media's requirement table forms a valid declaration"));
@@ -110,20 +110,20 @@ pub(crate) enum Target<'a> {
     Prompt(&'a str),
 }
 
-/// The verified Gateway identity, when it grants the permission `target` requires.
+/// The verified Hub identity, when it grants the permission `target` requires.
 pub(crate) fn require(
     context: &RequestContext<RoleServer>,
     target: Target<'_>,
-) -> Result<GatewayInternalIdentity, McpError> {
-    let identity = gateway_identity(context)?;
+) -> Result<HubInternalIdentity, McpError> {
+    let identity = hub_identity(context)?;
     authorize(&identity, target)?;
     Ok(identity)
 }
 
-/// Check the permission `target` requires against the Gateway's grants. A target the
+/// Check the permission `target` requires against the Hub's grants. A target the
 /// declaration omits is denied.
 pub(crate) fn authorize(
-    identity: &GatewayInternalIdentity,
+    identity: &HubInternalIdentity,
     target: Target<'_>,
 ) -> Result<(), McpError> {
     let permission = required(target)?;
@@ -245,6 +245,6 @@ mod tests {
     #[test]
     fn tool_annotations_agree_with_the_declaration() {
         let tools = super::super::MediaMcp::tools().list_all();
-        veoveo_sdk_rust::registration::mcp::check_tool_annotations(&AUTHORIZATION, &tools).unwrap();
+        veoveo_hub_sdk::registration::mcp::check_tool_annotations(&AUTHORIZATION, &tools).unwrap();
     }
 }

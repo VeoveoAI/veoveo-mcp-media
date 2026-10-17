@@ -19,6 +19,13 @@ use serde_json::{Value, json};
 use support::{
     Completion, Harness, all_permissions, harness, harness_granting, harness_with, usage_of, within,
 };
+use veoveo_hub_sdk::{
+    AccessTokenSubject, ForwardedRequest, HubInternalTokenIssuer, HubProfileId, HubRequestContext,
+    OAuthClientId, ProtectedResourceId, TokenIssuer,
+    durable_tasks::DurableTaskService,
+    hosting::testing::{self, MESH_PROFILE},
+    registration::ResourceIndicator,
+};
 use veoveo_mcp_artifact::contract::ArtifactPermission;
 use veoveo_mcp_media::{
     contract::{MediaPermission, MediaPredictionId, PredictionStatus},
@@ -26,13 +33,6 @@ use veoveo_mcp_media::{
     mcp::identity,
     predictions::Prediction,
     provider::generation_key,
-};
-use veoveo_sdk_rust::{
-    AccessTokenSubject, ForwardedRequest, GatewayInternalTokenIssuer, GatewayProfileId,
-    GatewayRequestContext, OAuthClientId, ProtectedResourceId, TokenIssuer,
-    durable_tasks::DurableTaskService,
-    hosting::testing::{self, MESH_PROFILE},
-    registration::ResourceIndicator,
 };
 use veoveo_task::{OperationState, TaskStatus};
 use veoveo_types::{InvocationMode, TaskId};
@@ -284,11 +284,11 @@ async fn cancelling_a_dispatched_run_reaches_the_provider_and_keeps_its_receipt(
 }
 
 /// The forwarded identity of the test user, as the mesh forwards it to Media.
-fn forwarded_user() -> veoveo_sdk_rust::GatewayInternalIdentity {
+fn forwarded_user() -> veoveo_hub_sdk::HubInternalIdentity {
     let principal = testing::principal();
     let authority = testing::authority();
     let now = Utc::now();
-    let context = GatewayRequestContext {
+    let context = HubRequestContext {
         audit: veoveo_audit_contract::AuditRequest::background(),
         access_token: AccessTokenSubject {
             issuer: principal.issuer.clone(),
@@ -308,13 +308,13 @@ fn forwarded_user() -> veoveo_sdk_rust::GatewayInternalIdentity {
         },
         principal: principal.clone(),
     };
-    GatewayInternalTokenIssuer::new(
+    HubInternalTokenIssuer::new(
         TokenIssuer::parse(testing::TEST_ISSUER).unwrap(),
         testing::signing_key(),
     )
     .unwrap()
     .issue(ForwardedRequest {
-        profile: GatewayProfileId::parse(MESH_PROFILE).unwrap(),
+        profile: HubProfileId::parse(MESH_PROFILE).unwrap(),
         server: veoveo_mcp_media::server(),
         audience: ResourceIndicator::parse(testing::TEST_RESOURCE).unwrap(),
         client: OAuthClientId::parse(testing::TEST_CLIENT).unwrap(),

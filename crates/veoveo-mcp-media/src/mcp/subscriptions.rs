@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use futures::StreamExt as _;
 use rmcp::{ErrorData as McpError, RoleServer, service::RequestContext};
-use veoveo_sdk_rust::{
-    hosting::{ResourceSubscriptions, gateway_identity},
+use veoveo_hub_sdk::{
+    hosting::{ResourceSubscriptions, hub_identity},
     subscriptions::SubscriptionHub,
 };
 use veoveo_store::{ChangeSignal, ChangeStream, Channel, ServerSchema};
@@ -52,7 +52,7 @@ impl ResourceSubscriptions for MediaSubscriptions {
         addresses: Vec<MediaResource>,
         context: &RequestContext<RoleServer>,
     ) -> Result<(), McpError> {
-        let identity = gateway_identity(context)?;
+        let identity = hub_identity(context)?;
         let owner = identity::task_owner(&identity)?;
         for address in addresses {
             if !address.is_subscribable() {

@@ -12,13 +12,13 @@ use rmcp::{
     },
     service::RequestContext,
 };
-use veoveo_sdk_rust::{
-    GatewayInternalIdentity,
+use veoveo_hub_sdk::{
+    HubInternalIdentity,
     durable_tasks::{
         DurableTaskService, DurableTaskSubscription, get_durable_task, subscribe_durable_tasks,
         task_seed, update_durable_task,
     },
-    hosting::gateway_identity,
+    hosting::hub_identity,
 };
 use veoveo_task::{CreateTask, RecoveryClass, TaskError, TaskRuntime};
 use veoveo_types::TaskId;
@@ -66,10 +66,10 @@ impl MediaTasks {
 }
 
 impl DurableTaskService for MediaTasks {
-    type Caller = GatewayInternalIdentity;
+    type Caller = HubInternalIdentity;
 
     fn authenticate(&self, context: &RequestContext<RoleServer>) -> Result<Self::Caller, McpError> {
-        gateway_identity(context)
+        hub_identity(context)
     }
 
     async fn start_tool_task(

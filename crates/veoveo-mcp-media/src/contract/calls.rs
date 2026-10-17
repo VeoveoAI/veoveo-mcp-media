@@ -1,8 +1,8 @@
 //! Media as a provider of calls between servers. Each tool's request names its tool and
 //! its typed result, so a server that declares uses of Media's permissions calls Media
-//! through the Gateway with the SDK's `GatewayClient`; `run` starts a Task whose handle
+//! through the Hub with the SDK's `HubClient`; `run` starts a Task whose handle
 //! resolves with the generation's result.
-use veoveo_sdk_rust::calls::{ProviderContract, TaskToolCall, ToolCall};
+use veoveo_hub_sdk::calls::{ProviderContract, TaskToolCall, ToolCall};
 use veoveo_types::ServerSlug;
 
 use super::{

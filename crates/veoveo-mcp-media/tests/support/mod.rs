@@ -12,6 +12,16 @@ use secrecy::SecretString;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 use veoveo_fixtures::store::TestDb;
+use veoveo_hub_sdk::{
+    durable_tasks::{CallbackUrls, DurableTasks, TaskWorker},
+    hosting::{
+        Hosted, ListenOnly, ServerCalls,
+        operations::operation_callbacks,
+        testing::{self, RunningMesh, TestMesh},
+    },
+    subscriptions::SubscriptionHub,
+    usage::{TASK_USAGE_META_KEY, UsageLedger},
+};
 use veoveo_mcp_artifact::{
     contract::ArtifactPermission,
     mcp::{
@@ -31,16 +41,6 @@ use veoveo_mcp_media::{
     provider::{ProviderClient, ProviderWebhooks},
     run::{self, MediaUsage, MediaWork, RunCompletion, RunSettings},
     store::MediaStore,
-};
-use veoveo_sdk_rust::{
-    durable_tasks::{CallbackUrls, DurableTasks, TaskWorker},
-    hosting::{
-        Hosted, ListenOnly, ServerCalls,
-        operations::operation_callbacks,
-        testing::{self, RunningMesh, TestMesh},
-    },
-    subscriptions::SubscriptionHub,
-    usage::{TASK_USAGE_META_KEY, UsageLedger},
 };
 use veoveo_store::PlatformStore;
 use veoveo_task::{Instance, TaskRuntime, TaskSnapshot, TaskStatus};

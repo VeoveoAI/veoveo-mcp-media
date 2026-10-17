@@ -7,7 +7,7 @@ use anyhow::{Context, anyhow};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use veoveo_sdk_rust::hosting::operations::{
+use veoveo_hub_sdk::hosting::operations::{
     ProviderEvent, ProviderEvents, ProviderRejection, ProviderRequest,
 };
 use veoveo_task::{

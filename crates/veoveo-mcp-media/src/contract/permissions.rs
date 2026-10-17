@@ -1,7 +1,7 @@
 //! Media's OAuth scope and permissions. Each permission names one action on one resource
 //! type, with the access kind and risks the `ai.veoveo/authorization` declaration
-//! carries; installation roles grant them and the Gateway forwards the granted ones.
-use veoveo_sdk_rust::registration::{Access, PermissionDefinition, Risk};
+//! carries; installation roles grant them and the Hub forwards the granted ones.
+use veoveo_hub_sdk::registration::{Access, PermissionDefinition, Risk};
 use veoveo_types::{PermissionName, Vocabulary};
 
 /// The OAuth scope that names Media's namespace. Scopes are coarse; Media's permissions

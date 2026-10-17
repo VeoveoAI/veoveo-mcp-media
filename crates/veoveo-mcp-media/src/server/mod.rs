@@ -1,4 +1,4 @@
-//! The hosted process: read the model catalog, register with the Gateway, connect with
+//! The hosted process: read the model catalog, register with the Hub, connect with
 //! the registration's database login, migrate, declare Media's usage kinds, then serve MCP
 //! and the provider's callback route while the run worker, the catalog refresh, the change
 //! watcher and the sweep run. Stopping deletes the registration.
@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Parser;
 use tokio_util::sync::CancellationToken;
-use veoveo_sdk_rust::{
+use veoveo_hub_sdk::{
     TelemetryGuard,
     durable_tasks::{CallbackUrls, DurableTasks, TaskWorker},
     hosting::{Hosted, HostedServer, ServerCalls, operations::operation_callbacks},
@@ -66,7 +66,7 @@ pub async fn run() -> Result<()> {
         registration,
         metadata,
         key,
-        http: gateway_http,
+        http: hub_http,
     } = registered;
     let issued = registration.clone();
     let mut served = None;
@@ -77,10 +77,10 @@ pub async fn run() -> Result<()> {
                     &args,
                     &deployment,
                     &issued,
-                    Gateway {
+                    Hub {
                         metadata: &metadata,
                         key: &key,
-                        http: gateway_http,
+                        http: hub_http,
                     },
                     provider,
                     http,
@@ -95,10 +95,10 @@ pub async fn run() -> Result<()> {
     served.context("Media's registration ended before serving finished")?
 }
 
-/// What calls through the Gateway need from the registration.
-struct Gateway<'a> {
-    metadata: &'a veoveo_sdk_rust::registration::ClientMetadata,
-    key: &'a veoveo_sdk_rust::registration::statement::ServerKeyPair,
+/// What calls through the Hub need from the registration.
+struct Hub<'a> {
+    metadata: &'a veoveo_hub_sdk::registration::ClientMetadata,
+    key: &'a veoveo_hub_sdk::registration::statement::ServerKeyPair,
     http: reqwest::Client,
 }
 
@@ -106,15 +106,15 @@ struct Gateway<'a> {
 /// until SIGTERM or Ctrl-C, or until the process instance loses its lock.
 async fn serve(
     args: &Args,
-    deployment: &veoveo_sdk_rust::PublicDeployment,
-    registration: &veoveo_sdk_rust::registration::client::Registration,
-    gateway: Gateway<'_>,
+    deployment: &veoveo_hub_sdk::PublicDeployment,
+    registration: &veoveo_hub_sdk::registration::client::Registration,
+    hub: Hub<'_>,
     provider: ProviderClient,
     http: reqwest::Client,
 ) -> Result<()> {
     let grant = registration
         .database()
-        .context("the Gateway issued no database login for Media")?;
+        .context("the Hub issued no database login for Media")?;
     let runtime = TaskRuntime::connect(
         TaskRuntimeConfig::new(
             grant.url.as_str(),
@@ -138,14 +138,9 @@ async fn serve(
     let instance = runtime.instance().clone();
     let store = MediaStore::new(platform.clone());
     let catalog = Arc::new(Catalog::new(provider.clone()));
-    let calls = ServerCalls::discover(
-        registration,
-        gateway.metadata,
-        gateway.key,
-        gateway.http.clone(),
-    )
-    .await
-    .context("discovering the Gateway's token endpoint")?;
+    let calls = ServerCalls::discover(registration, hub.metadata, hub.key, hub.http.clone())
+        .await
+        .context("discovering the Hub's token endpoint")?;
     let settings = Arc::new(args.run_settings(deployment)?);
     let work = MediaWork::new(store.clone(), catalog.clone(), provider, http, settings)?;
     let mut worker = TaskWorker::new(runtime.clone()).calls(calls).usage(usage);
@@ -163,7 +158,7 @@ async fn serve(
         }
         None => tracing::info!("runs complete through bounded status checks"),
     }
-    let hub = Arc::new(SubscriptionHub::new());
+    let notifications = Arc::new(SubscriptionHub::new());
     let predictions = Predictions::new(runtime.clone(), store.clone());
     let app = Arc::new(MediaApp {
         predictions: predictions.clone(),
@@ -175,25 +170,25 @@ async fn serve(
         catalog.clone(),
         args.run_retention(),
     );
-    let subscriptions = MediaSubscriptions::new(predictions.clone(), hub.clone());
+    let subscriptions = MediaSubscriptions::new(predictions.clone(), notifications.clone());
 
     let stop = CancellationToken::new();
     let refreshing = tokio::spawn(catalog.clone().keep_fresh(stop.clone()));
-    let watching = tokio::spawn(watch_changes(store.clone(), runtime.clone(), hub));
+    let watching = tokio::spawn(watch_changes(store.clone(), runtime.clone(), notifications));
     let sweeping = tokio::spawn(sweep(predictions, args.run_retention(), stop.clone()));
     let mut working = tokio::spawn(run::work(worker, work, stop.clone()));
 
     let hosted = HostedServer::for_domain::<MediaMcp>()
         .deployment(deployment, args.allow_loopback_hosts)?
         .allowed_hosts(args.allowed_hosts.iter().cloned())
-        .internal_trust(registration.access_tokens(), gateway.http)?
+        .internal_trust(registration.access_tokens(), hub.http)?
         .handler(move || {
             Hosted::new(MediaMcp::new(app.clone())).with_tasks(DurableTasks::with_resources(
                 tasks.clone(),
                 subscriptions.clone(),
             ))
         })
-        // The provider posts its outcomes without Gateway authentication; the route
+        // The provider posts its outcomes without Hub authentication; the route
         // admits only events whose signature and callback token check out.
         .public_routes(operation_callbacks(
             runtime.clone(),

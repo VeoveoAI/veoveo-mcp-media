@@ -4,7 +4,7 @@
 use rmcp::{
     ErrorData as McpError, RoleServer, model::ReadResourceRequestParams, service::RequestContext,
 };
-use veoveo_sdk_rust::hosting::{DomainRead, json_read, served_by_host};
+use veoveo_hub_sdk::hosting::{DomainRead, json_read, served_by_host};
 
 use crate::{
     contract::{

@@ -23,7 +23,7 @@ use rmcp::{
     service::RequestContext,
     tool, tool_router,
 };
-use veoveo_sdk_rust::{
+use veoveo_hub_sdk::{
     hosting::{
         DomainAddress, DomainRead, DomainServer, completion, rank_completions, structured_result,
         unknown_prompt,

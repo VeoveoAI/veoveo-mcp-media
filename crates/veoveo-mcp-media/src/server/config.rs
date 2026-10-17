@@ -1,4 +1,4 @@
-//! The server's configuration. Every flag has its environment variable. The Gateway
+//! The server's configuration. Every flag has its environment variable. The Hub
 //! issues the database login and the access-token trust when Media registers, so neither
 //! is configured here. The provider's address has no default: an installation names the
 //! provider it calls.
@@ -7,8 +7,8 @@ use std::{collections::BTreeSet, path::PathBuf, time::Duration};
 use clap::Parser;
 use secrecy::SecretString;
 use url::Url;
+use veoveo_hub_sdk::{PublicDeployment, PublicOrigin, parse_allowed_host_authority};
 use veoveo_mcp_artifact::contract::RetentionDays;
-use veoveo_sdk_rust::{PublicDeployment, PublicOrigin, parse_allowed_host_authority};
 
 use crate::run::{RunCompletion, RunSettings};
 
@@ -17,7 +17,7 @@ use crate::run::{RunCompletion, RunSettings};
 pub(super) struct Args {
     #[arg(long, env = "VEOVEO_PORT", default_value_t = 8802)]
     pub port: u16,
-    /// The origin where the Gateway reaches Media; Media serves MCP at
+    /// The origin where the Hub reaches Media; Media serves MCP at
     /// `{public_base_url}/media/mcp` and registers that URL.
     #[arg(long, env = "VEOVEO_PUBLIC_BASE_URL")]
     pub public_base_url: String,
@@ -29,9 +29,9 @@ pub(super) struct Args {
     /// endpoint.
     #[arg(long, env = "VEOVEO_PUBLIC_ORIGIN")]
     pub public_origin: Option<PublicOrigin>,
-    /// The Gateway's RFC 8414 issuer; registration discovers its endpoint from there.
-    #[arg(long, env = "VEOVEO_GATEWAY_ISSUER")]
-    pub gateway_issuer: Url,
+    /// The Hub's RFC 8414 issuer; registration discovers its endpoint from there.
+    #[arg(long, env = "VEOVEO_HUB_ISSUER")]
+    pub hub_issuer: Url,
     /// The installation's registration secret, or the placeholder the installation's edge replaces.
     #[arg(
         long,
@@ -157,8 +157,8 @@ mod tests {
             "veoveo-mcp-media",
             "--public-base-url",
             "http://vv-mcp-media.internal:8802",
-            "--gateway-issuer",
-            "http://vv-gateway.internal:8080",
+            "--hub-issuer",
+            "http://vv-hub.internal:8080",
             "--registration-secret",
             "placeholder",
             "--provider-api-key",
@@ -200,7 +200,7 @@ mod tests {
         .unwrap();
         let deployment = webhooks.public_deployment().unwrap();
         assert_eq!(
-            veoveo_sdk_rust::public_allowed_hosts(&deployment, false),
+            veoveo_hub_sdk::public_allowed_hosts(&deployment, false),
             vec!["vv-mcp-media.internal:8802", "veoveo.example.com"]
         );
         assert_eq!(

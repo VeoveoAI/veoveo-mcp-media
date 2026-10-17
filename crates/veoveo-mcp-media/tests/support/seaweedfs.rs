@@ -30,7 +30,7 @@ pub struct TestSeaweedFs {
 }
 
 impl TestSeaweedFs {
-    /// Start SeaweedFS on free loopback ports and wait until its S3 gateway answers, for
+    /// Start SeaweedFS on free loopback ports and wait until its S3 hub answers, for
     /// at most 30 seconds. The ports are free when chosen, but another process can take
     /// one before SeaweedFS binds it; SeaweedFS then exits, and the fixture starts it
     /// again on other ports, at most three times.
@@ -152,7 +152,7 @@ fn free_ports() -> [u16; 5] {
     ports
 }
 
-/// True once SeaweedFS's S3 gateway answers at `endpoint`, false when the process exits
+/// True once SeaweedFS's S3 hub answers at `endpoint`, false when the process exits
 /// first. Panics at `deadline` with SeaweedFS's error output.
 async fn answers(
     child: &mut Child,

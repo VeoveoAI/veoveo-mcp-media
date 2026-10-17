@@ -7,7 +7,7 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
   supported configuration.
 - Prefer strong types: typed structs, enums and domain identifiers over raw strings and
   JSON wherever the shape is known.
-- MCP comes from [veoveo-sdk-rust](https://github.com/VeoveoAI/veoveo-sdk-rust): hosting, registration with the Gateway,
+- MCP comes from [veoveo-hub-sdk](https://github.com/VeoveoAI/veoveo-hub-sdk): hosting, registration with the Hub,
   the forwarded identity, permission requirements, the documents and contract
   resources, subscriptions, the MCP Tasks adapter and calls to other servers. Depend on
   it by Git revision. veoveo-core holds no MCP; take types, the store, Tasks, usage and audit
@@ -16,11 +16,11 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
   revision, declares the permissions it calls with through
   `AuthorizationBuilder::uses`, and calls through `ctx.client()` in a handler or
   `ServerCalls::for_task` in a Task worker, as the SDK's
-  [calls to other servers](https://github.com/VeoveoAI/veoveo-sdk-rust/blob/main/crates/veoveo-sdk-rust/DESIGN.md#calls-to-other-servers)
+  [calls to other servers](https://github.com/VeoveoAI/veoveo-hub-sdk/blob/main/crates/veoveo-hub-sdk/DESIGN.md#calls-to-other-servers)
   describe. A server whose tools others call publishes each tool's request as a
   `ToolCall` in its own `contract` feature.
 - Run Tasks through the SDK's `TaskWorker`, whose handler receives the Task's `ctx`, as
-  the SDK's [Task work](https://github.com/VeoveoAI/veoveo-sdk-rust/blob/main/crates/veoveo-sdk-rust/DESIGN.md#task-work) describes. Wrap work a restarted Task must not
+  the SDK's [Task work](https://github.com/VeoveoAI/veoveo-hub-sdk/blob/main/crates/veoveo-hub-sdk/DESIGN.md#task-work) describes. Wrap work a restarted Task must not
   repeat in `ctx.step`, which returns a finished step's stored result.
 - Work handed to an outside provider is an operation. `ctx.operation(..).dispatch`
   records it before the call and gives the provider an idempotency key and a callback
@@ -71,7 +71,7 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
 - Names, identifiers and formats follow the
   [naming and format conventions](https://github.com/VeoveoAI/veoveo-core/blob/main/docs/CONVENTIONS.md),
   and MCP names follow the SDK's
-  [MCP naming conventions](https://github.com/VeoveoAI/veoveo-sdk-rust/blob/main/docs/CONVENTIONS.md).
+  [MCP naming conventions](https://github.com/VeoveoAI/veoveo-hub-sdk/blob/main/docs/CONVENTIONS.md).
   Where a standard governs a name or format, follow it; extend a standard only through
   its own extension mechanism. URIs, paths and identifiers carry no version segment such
   as `/v1`; releases carry versions.

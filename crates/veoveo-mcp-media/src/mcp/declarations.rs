@@ -1,8 +1,8 @@
-//! Media's registration declaration. Media registers it with the Gateway and advertises
+//! Media's registration declaration. Media registers it with the Hub and advertises
 //! the same value in MCP Discover, so both have one source.
 use std::sync::OnceLock;
 
-use veoveo_sdk_rust::{
+use veoveo_hub_sdk::{
     PublicDeployment,
     registration::{RegistrationDeclaration, ServerEndpoint, ServerVersion},
     server_contract::McpServerContract,
@@ -14,7 +14,7 @@ use super::setup::MediaContract;
 /// setup is built; until then Discover advertises no declarations.
 pub static REGISTRATION: OnceLock<RegistrationDeclaration> = OnceLock::new();
 
-/// Media's identity and the URL where the Gateway reaches its MCP endpoint:
+/// Media's identity and the URL where the Hub reaches its MCP endpoint:
 /// `{public_base_url}/media/mcp`.
 pub fn registration(deployment: &PublicDeployment) -> anyhow::Result<RegistrationDeclaration> {
     let endpoint = deployment.server(MediaContract::slug().as_str())?;

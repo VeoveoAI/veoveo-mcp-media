@@ -15,19 +15,19 @@ use rmcp::model::Resource;
 use serde_json::{Map, json};
 use tokio_util::sync::CancellationToken;
 use url::Url;
-use veoveo_mcp_artifact::{
-    client::{ArtifactClient, UploadBody},
-    contract::{
-        ArtifactLabels, ArtifactMetadataMap, ArtifactName, ArtifactResource, IdempotencyKey,
-        MediaType, ObjectSize, RetentionDays,
-    },
-};
-use veoveo_sdk_rust::{
+use veoveo_hub_sdk::{
     durable_tasks::{TaskContext, TaskStop, TaskWorkError, TaskWorker, mcp_task_completion},
     hosting::product_result,
     usage::{
         Amount, ChargePeriod, Currency, Money, Quantity, ServiceCategory, UsageKind,
         UsageKindDeclaration, UsageKinds, UsageUnit,
+    },
+};
+use veoveo_mcp_artifact::{
+    client::{ArtifactClient, UploadBody},
+    contract::{
+        ArtifactLabels, ArtifactMetadataMap, ArtifactName, ArtifactResource, IdempotencyKey,
+        MediaType, ObjectSize, RetentionDays,
     },
 };
 use veoveo_store::TenantId as StoredTenant;

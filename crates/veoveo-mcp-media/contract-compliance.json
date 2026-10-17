@@ -48,7 +48,7 @@
     {
       "id": "C11",
       "status": "met",
-      "note": "outputs reach Artifact through the Gateway with the run's Task delegation; Media holds no Artifact credential"
+      "note": "outputs reach Artifact through the Hub with the run's Task delegation; Media holds no Artifact credential"
     },
     {
       "id": "C12",

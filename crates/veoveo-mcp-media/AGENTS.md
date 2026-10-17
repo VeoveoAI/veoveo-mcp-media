@@ -81,7 +81,7 @@ Contract: https://veoveo.ai/contracts/hosted-mcp
 - C08: met
 - C09: met
 - C10: met
-- C11: met — outputs reach Artifact through the Gateway with the run's Task delegation; Media holds no Artifact credential
+- C11: met — outputs reach Artifact through the Hub with the run's Task delegation; Media holds no Artifact credential
 - C12: met
 - C13: met
 - C14: met — outputs stream from the provider into Artifact through signed object-storage URLs; the public callback route takes only signed provider events and serves no bytes

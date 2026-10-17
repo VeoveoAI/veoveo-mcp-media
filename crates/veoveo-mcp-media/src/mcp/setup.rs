@@ -3,7 +3,7 @@
 use std::sync::LazyLock;
 
 use rmcp::model::{Resource, ResourceTemplate, ServerCapabilities, ServerConfig};
-use veoveo_sdk_rust::{
+use veoveo_hub_sdk::{
     ServerSlug,
     docs::ServerDocs,
     server_contract::{
@@ -17,7 +17,7 @@ use crate::contract::{MediaDocument, MediaResource, MediaScope};
 /// The crate documents embedded at build time and served under `media://docs`,
 /// `media://docs/{doc_id}`, `media://contract` and the admin document routes.
 pub(crate) static SERVER_DOCS: LazyLock<ServerDocs> =
-    LazyLock::new(|| veoveo_sdk_rust::server_docs!("media"));
+    LazyLock::new(|| veoveo_hub_sdk::server_docs!("media"));
 
 pub struct MediaContract;
 
@@ -171,7 +171,7 @@ fn server_config() -> ServerConfig {
         rmcp::model::JsonObject::new(),
     );
     if let Some(registration) = super::declarations::REGISTRATION.get() {
-        veoveo_sdk_rust::registration::mcp::advertise(
+        veoveo_hub_sdk::registration::mcp::advertise(
             &mut capabilities,
             registration,
             &super::requirements::AUTHORIZATION,

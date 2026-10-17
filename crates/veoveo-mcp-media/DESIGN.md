@@ -28,13 +28,13 @@ port         8802
 
 | Standard or protocol | Implemented profile |
 |---|---|
-| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-sdk-rust` 9bf0a3a implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
+| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-hub-sdk` 9bf0a3a implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
 | [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12/) | Tool inputs and results and resource contents. A run's input is checked with jsonschema 0.58.6 against the JSON Schema the provider publishes for the model; that schema's shape is the provider's. |
 | [URI Template RFC 6570](https://www.rfc-editor.org/rfc/rfc6570) | Discovery declares simple variables, one `{+model_id}` reserved expansion for a model's `/`-separated components, and collection pages that continue through a `cursor` query parameter. |
-| [JWT access tokens RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html) and [Token Exchange RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | The Gateway forwards each request with an access token naming the caller. A run calls Artifact through the Gateway with a token the SDK obtains by exchange for the run's Task, narrowed to Media's declared uses of Artifact that the caller holds. |
+| [JWT access tokens RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html) and [Token Exchange RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | The Hub forwards each request with an access token naming the caller. A run calls Artifact through the Hub with a token the SDK obtains by exchange for the run's Task, narrowed to Media's declared uses of Artifact that the caller holds. |
 | [HMAC-SHA256, RFC 2104](https://www.rfc-editor.org/rfc/rfc2104) | The provider signs each webhook over `{webhook-id}.{webhook-timestamp}.{body}` with the account's webhook secret; the `webhook-signature` header carries `v3,<hex>` signatures. Media refuses a signing time more than 300 seconds from its clock. |
 | [FOCUS 1.4](https://focus.finops.org/focus-specification/) usage records in core's [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/9a6b3ff95469ff19f9ccb513421a57ba6751aa9e/platform/usage/DESIGN.md) | One usage kind, `media.generation`, in the FOCUS service category "AI and Machine Learning" with the unit `Requests`, and amounts in [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) US dollars. |
-| [Veoveo server registration](https://github.com/VeoveoAI/veoveo-sdk-rust) | Media registers through RFC 7591, removes its registration through RFC 7592, and declares its permissions and its uses of Artifact in `ai.veoveo/authorization`. |
+| [Veoveo server registration](https://github.com/VeoveoAI/veoveo-hub-sdk) | Media registers through RFC 7591, removes its registration through RFC 7592, and declares its permissions and its uses of Artifact in `ai.veoveo/authorization`. |
 | [PostgreSQL 18](https://www.postgresql.org/docs/18/) | Server 18.6 through sqlx 0.9.0, under the [installation database design](https://github.com/VeoveoAI/veoveo-core/blob/9a6b3ff95469ff19f9ccb513421a57ba6751aa9e/docs/DATABASE.md) of `veoveo-core`. Media owns the schema `media`, applies its own migrations and runs every statement from a `.sql` file that sqlx checks. Row triggers publish changes on the `media` channel. |
 | The provider's HTTP API | The subset Media calls: the model registry, a price quote for a model and an input, a submission with an optional webhook, a prediction's status endpoint, a billing search and a prediction's deletion. Every response is wrapped in `{code, message, data}`. |
 
@@ -61,7 +61,7 @@ generation results.
 
 ### Hosted Process
 
-`veoveo-mcp-media` reads the configuration, registers with the Gateway, connects with
+`veoveo-mcp-media` reads the configuration, registers with the Hub, connects with
 the registration's database login, applies its migrations, declares its usage kind and
 serves MCP and the callback route. Beside them run the run worker on the SDK's
 `TaskWorker`, the catalog refresh, the change watcher and the sweep. SIGTERM stops
@@ -93,7 +93,7 @@ a bad request fails at once and costs nothing.
 | `media://prediction/{prediction_id}/result` | A succeeded run's result |
 
 A run is its Task's: a caller sees the runs whose Tasks core's Task runtime selects
-for them as their owner, the principal who started the run on the same Gateway profile
+for them as their owner, the principal who started the run on the same Hub profile
 while they hold every data label the run carries.
 A run the reader may not see reads as missing. The prediction listing and single
 predictions accept subscriptions; the catalog, documents and results do not change.
@@ -257,7 +257,7 @@ Artifact. A run's calls to Artifact carry only those of the two the caller holds
 
 ## Registration
 
-Media registers its identity and the URL where the Gateway reaches it,
+Media registers its identity and the URL where the Hub reaches it,
 `{VEOVEO_PUBLIC_BASE_URL}/media/mcp`, with the requirement table and its uses of
 Artifact. Its key in `VEOVEO_KEY_DIRECTORY` keeps its namespace across restarts and
 signs the client assertions of its token exchanges.
@@ -266,8 +266,8 @@ signs the client assertions of its token exchanges.
 
 | Variable | Meaning |
 |---|---|
-| `VEOVEO_PUBLIC_BASE_URL`, `VEOVEO_PORT` | Where the Gateway reaches Media, and the port, 8802 by default |
-| `VEOVEO_GATEWAY_ISSUER`, `VEOVEO_REGISTRATION_SECRET`, `VEOVEO_KEY_DIRECTORY` | Registration with the Gateway |
+| `VEOVEO_PUBLIC_BASE_URL`, `VEOVEO_PORT` | Where the Hub reaches Media, and the port, 8802 by default |
+| `VEOVEO_HUB_ISSUER`, `VEOVEO_REGISTRATION_SECRET`, `VEOVEO_KEY_DIRECTORY` | Registration with the Hub |
 | `MEDIA_PROVIDER_URL` | The provider's API origin; required |
 | `MEDIA_PROVIDER_API_KEY`, `MEDIA_PROVIDER_WEBHOOK_SECRET` | The provider's API key and webhook secret |
 | `VEOVEO_PUBLIC_ORIGIN` | The installation's public `https` origin, which joins Media's SDK deployment: Media accepts requests for its host, the provider reaches Media's callback path under it, and setting it selects events completion |
@@ -293,5 +293,5 @@ signs the client assertions of its token exchanges.
 | `tests/run.rs` | Runs on the SDK's in-process mesh against the fake provider, with Artifact in process over a private SeaweedFS: a run stored and billed; a refused input; a forged, repeated and late webhook; a restart while parked; cancellation before and after dispatch; an output redirected off the allowed hosts; a large output in parts; a provider failure; a caller without the run permission; completion through status checks; a fake provider restarted against the same database; a provider that repeats a prediction's identity, which fails the second run as `prediction_conflict`; a run whose outputs the database refuses to record, which fails as `store_refused` and reads as its Task ended; the listing newest first, each run as its Task stands; an estimate from the provider's quote above the base price; a run the provider cannot price |
 | `tests/database_conformance.rs` | Core's database rules over every statement and the schema |
 | `tests/sql_confinement.rs` | Every statement and migration names only the `media` schema, through the SDK's `assert_sql_confined` |
-| `tests/acceptance.rs` | Ignored by default: a run through the Gateway of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run; gated by `MEDIA_PROVIDER_QUALIFICATION=1`, one billed run through the installation against the real provider, its outputs read through Artifact, its estimate and actual cost in the Gateway's cost view, and its completion matching the configuration |
+| `tests/acceptance.rs` | Ignored by default: a run through the Hub of a running installation against the fake provider, its output read through Artifact, and the member refused the billed run; gated by `MEDIA_PROVIDER_QUALIFICATION=1`, one billed run through the installation against the real provider, its outputs read through Artifact, its estimate and actual cost in the Hub's cost view, and its completion matching the configuration |
 | `tests/provider_qualification.rs` | Ignored by default and gated by `MEDIA_PROVIDER_QUALIFICATION=1`: one billed generation with the real provider through the full flow, on the model with the lowest quote for its input, whose bill the quote covers |

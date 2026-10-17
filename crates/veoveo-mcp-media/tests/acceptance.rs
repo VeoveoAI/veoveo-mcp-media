@@ -1,10 +1,10 @@
-//! Acceptance through a running local installation: Media registered with the Gateway,
-//! called through the Gateway by the installation's member and admin callers, with each
+//! Acceptance through a running local installation: Media registered with the Hub,
+//! called through the Hub by the installation's member and admin callers, with each
 //! output stored in Artifact for the caller and its bytes read from the installation's
 //! object store through the URL Artifact signs.
 //!
 //! The tests need a running installation, so they are ignored by default. Inside the
-//! Media environment, set `VEOVEO_ACCEPTANCE_GATEWAY` to the Gateway origin and
+//! Media environment, set `VEOVEO_ACCEPTANCE_HUB` to the Hub origin and
 //! `VEOVEO_ACCEPTANCE_KEY_DIRECTORY` to the directory holding the callers' keys, then
 //! run `cargo nextest run --test acceptance --run-ignored only`. The fake-provider cases
 //! need Media running against the fake provider.
@@ -34,11 +34,11 @@ use rmcp::{
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+use veoveo_hub_sdk::client::{BearerSource as _, ClientCredentialsBearer, caller_signer};
 use veoveo_mcp_media::{
     contract::{CompletionMode, GenerationResult, ModelCatalogPage, PredictionView},
     fake::{IMAGE_BYTES, IMAGE_MODEL, output_byte},
 };
-use veoveo_sdk_rust::client::{BearerSource as _, ClientCredentialsBearer, caller_signer};
 use veoveo_types::{OAuthClientId, ScopeName};
 
 const MEMBER: &str = "acceptance-member";
@@ -58,7 +58,7 @@ impl ClientHandler for Caller {
 type Client = RunningService<RoleClient, Caller>;
 
 struct Installation {
-    gateway: url::Url,
+    hub: url::Url,
     keys: PathBuf,
 }
 
@@ -66,18 +66,18 @@ impl Installation {
     fn from_env() -> Result<Self> {
         // reqwest is built without a TLS provider; Media uses rustls with ring.
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let gateway = std::env::var("VEOVEO_ACCEPTANCE_GATEWAY")
-            .context("VEOVEO_ACCEPTANCE_GATEWAY names the Gateway origin")?;
+        let hub = std::env::var("VEOVEO_ACCEPTANCE_HUB")
+            .context("VEOVEO_ACCEPTANCE_HUB names the Hub origin")?;
         let keys = std::env::var("VEOVEO_ACCEPTANCE_KEY_DIRECTORY")
             .context("VEOVEO_ACCEPTANCE_KEY_DIRECTORY names the callers' key directory")?;
         Ok(Self {
-            gateway: url::Url::parse(&gateway)?,
+            hub: url::Url::parse(&hub)?,
             keys: PathBuf::from(keys),
         })
     }
 
     fn mcp(&self) -> Result<url::Url> {
-        Ok(self.gateway.join("/mcp/local")?)
+        Ok(self.hub.join("/mcp/local")?)
     }
 
     /// The caller's client-credentials token for the profile, through the SDK's bearer,
@@ -96,7 +96,7 @@ impl Installation {
         Ok(bearer.caller_bearer().await?.expose().to_owned())
     }
 
-    /// Media's generation usage in `caller`'s own daily cost view at the Gateway, from
+    /// Media's generation usage in `caller`'s own daily cost view at the Hub, from
     /// yesterday through tomorrow.
     async fn generation_usage(&self, caller: &str) -> Result<GenerationUsage> {
         let token = self.token(caller).await?;
@@ -104,7 +104,7 @@ impl Installation {
         let mut totals = GenerationUsage::default();
         let mut cursor: Option<String> = None;
         loop {
-            let mut url = self.gateway.join("/admin/local/usage/daily")?;
+            let mut url = self.hub.join("/admin/local/usage/daily")?;
             {
                 let mut query = url.query_pairs_mut();
                 query
@@ -268,7 +268,7 @@ async fn generate(
 
 #[tokio::test]
 #[ignore = "requires a running local installation with the fake provider"]
-async fn a_run_through_the_gateway_stores_its_output_in_artifact_with_its_cost() -> Result<()> {
+async fn a_run_through_the_hub_stores_its_output_in_artifact_with_its_cost() -> Result<()> {
     let installation = Installation::from_env()?;
     let admin = installation.connect(ADMIN).await?;
     let models: ModelCatalogPage = call(&admin, "media", "models", json!({})).await?;
@@ -365,8 +365,8 @@ async fn a_member_browses_models_and_is_refused_the_billed_run() -> Result<()> {
 
 #[tokio::test]
 #[ignore = "bills the real provider; set MEDIA_PROVIDER_QUALIFICATION=1 with Media configured for it"]
-async fn a_real_provider_run_through_the_gateway_stores_its_output_and_records_its_costs()
--> Result<()> {
+async fn a_real_provider_run_through_the_hub_stores_its_output_and_records_its_costs() -> Result<()>
+{
     if std::env::var("MEDIA_PROVIDER_QUALIFICATION").as_deref() != Ok("1") {
         eprintln!("MEDIA_PROVIDER_QUALIFICATION is not 1; the real-provider case does not run");
         return Ok(());
