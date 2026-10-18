@@ -131,8 +131,8 @@
     },
     {
       "id": "C31",
-      "status": "pending",
-      "note": "installed Discover and list readiness qualification is pending"
+      "status": "met",
+      "note": "native deployed revision `392c2c1` passed MCP Discover, tool listing, model catalog and model-schema discovery through Hub"
     },
     {
       "id": "C33",

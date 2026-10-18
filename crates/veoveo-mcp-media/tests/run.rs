@@ -28,7 +28,7 @@ use veoveo_hub_sdk::{
 };
 use veoveo_mcp_artifact::contract::ArtifactPermission;
 use veoveo_mcp_media::{
-    contract::{MediaPermission, MediaPredictionId, PredictionStatus},
+    contract::{GenerationResult, MediaPermission, MediaPredictionId, PredictionStatus},
     fake::{FAILING_MODEL, IMAGE_BYTES, IMAGE_MODEL, LARGE_BYTES, LARGE_MODEL, output_byte},
     mcp::identity,
     predictions::Prediction,
@@ -119,6 +119,15 @@ async fn a_run_stores_its_output_in_artifact_and_records_its_cost() {
         assert_eq!(page.items.len(), 1);
         assert_eq!(page.items[0].outputs().len(), 1);
         assert_eq!(page.items[0].status(), PredictionStatus::Succeeded);
+        // A result snapshot is stamped before the Task transition commits. The prediction
+        // projects core's lifecycle timestamp; every other summary field must agree.
+        let generated: GenerationResult = serde_json::from_value(result.clone()).unwrap();
+        let persisted = page.items[0].summary().unwrap();
+        assert!(generated.prediction.completed_at.is_some());
+        assert!(persisted.completed_at.is_some());
+        let mut snapshot = generated.prediction;
+        snapshot.completed_at = persisted.completed_at;
+        assert_eq!(snapshot, persisted);
         assert_eq!(harness.fake().submissions(), 1);
     })
     .await;

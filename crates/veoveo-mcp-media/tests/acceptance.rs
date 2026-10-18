@@ -1133,7 +1133,17 @@ async fn restart_persistence_verify() -> Result<()> {
         ensure!(next_task(&mut listener, &task_id).await?.payload == retained.payload,
             "fresh Task subscription did not open with retained completion");
         let stored: GenerationResult = read(&caller, &result.result_uri.to_string()).await?;
-        ensure!(stored == result, "retained prediction result differs from retained Task completion");
+        let prediction_id = result.prediction.prediction_id.as_ref().context("retained provider prediction")?;
+        let view: PredictionView = read(&caller, &format!("media://prediction/{prediction_id}")).await?;
+        ensure!(result.prediction.completed_at.is_some() && stored.prediction.completed_at.is_some(),
+            "Task result and persisted prediction must both retain completion timestamps");
+        ensure!(stored.prediction == view.prediction,
+            "result resource differs from the authoritative persisted prediction");
+        // run.rs stamps the result before core commits the Task transition; predictions.rs
+        // projects that transition's persisted timestamp. Only those completion times differ.
+        let mut expected = result.clone();
+        expected.prediction.completed_at = view.prediction.completed_at;
+        ensure!(stored == expected, "retained prediction result differs from retained Task completion semantics");
         verify_output(&installation, &caller, &result, IMAGE_MODEL, IMAGE_BYTES).await?;
         eprintln!("Task {task_id}: terminal result, prediction, Artifact metadata/bytes and fresh subscription retained");
         Ok(())

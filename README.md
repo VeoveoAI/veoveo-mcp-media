@@ -210,6 +210,14 @@ bytes, plus a newly opened subscription. Operator evidence must separately show
 unchanged registration public identity/key and approved volumes. This is terminal
 persistence, not proof of in-flight recovery.
 
+The Task's frozen result carries the completion-result construction time from
+[`run.rs`](crates/veoveo-mcp-media/src/run.rs). Prediction/result resources use the
+persisted Task lifecycle completion time through
+[`predictions.rs`](crates/veoveo-mcp-media/src/predictions.rs) and
+[`resources.rs`](crates/veoveo-mcp-media/src/mcp/resources.rs). Verification requires
+both timestamps, checks the resource against the authoritative prediction, and
+compares every other typed result field exactly.
+
 Certificate/name verification stays enabled. A transport error is a failed
 operation, not proof of permission refusal. For credential renewal, the trusted
 operator records initial expiry and actual verifier leeway, verifies automatic
