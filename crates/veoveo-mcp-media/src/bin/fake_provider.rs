@@ -1,5 +1,5 @@
 //! The fake generation provider for tests and the local installation. It listens on a
-//! loopback address and posts every outcome to the submission's webhook, signed with
+//! configured address and posts every outcome to the submission's webhook, signed with
 //! `MEDIA_PROVIDER_WEBHOOK_SECRET`. It never reaches the real provider.
 use std::{net::SocketAddr, time::Duration};
 
@@ -18,6 +18,9 @@ struct Args {
         default_value = "127.0.0.1:8803"
     )]
     listen: SocketAddr,
+    /// Origin used in status/output links, independent of the local listener.
+    #[arg(long, env = "MEDIA_FAKE_PROVIDER_ADVERTISED_BASE")]
+    advertised_base: Option<url::Url>,
     #[arg(long, env = "MEDIA_PROVIDER_WEBHOOK_SECRET", hide_env_values = true)]
     webhook_secret: String,
     /// How long a prediction runs before its outcome is posted, in milliseconds.
@@ -31,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let fake = FakeProvider::start(FakeProviderConfig {
         listen: args.listen,
+        advertised_base: args.advertised_base,
         webhook_secret: args.webhook_secret,
         delay: Duration::from_millis(args.delay_ms),
         deliver: true,

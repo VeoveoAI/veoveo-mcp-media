@@ -165,6 +165,9 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Debug, Clone)]
 pub struct FakeProviderConfig {
     pub listen: SocketAddr,
+    /// Public origin used in prediction status/output links. Omitted in-process
+    /// fixtures advertise the bound socket; native exposures supply their HTTPS origin.
+    pub advertised_base: Option<Url>,
     /// The webhook secret, `whsec_` and the key.
     pub webhook_secret: String,
     /// How long a prediction runs before the fake posts its outcome.
@@ -174,6 +177,35 @@ pub struct FakeProviderConfig {
     pub deliver: bool,
 }
 
+fn validate_advertised_base(base: &Url) -> std::io::Result<()> {
+    let unspecified = match base.host() {
+        Some(url::Host::Ipv4(address)) => address.is_unspecified(),
+        Some(url::Host::Ipv6(address)) => {
+            address.is_unspecified()
+                || address
+                    .to_ipv4_mapped()
+                    .is_some_and(|ip| ip.is_unspecified())
+        }
+        _ => false,
+    };
+    if !matches!(base.scheme(), "http" | "https")
+        || !base.has_host()
+        || base.port_or_known_default().is_none_or(|port| port == 0)
+        || !base.username().is_empty()
+        || base.password().is_some()
+        || base.path() != "/"
+        || base.query().is_some()
+        || base.fragment().is_some()
+        || unspecified
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "fake advertised base must be an HTTP(S) origin without credentials, path, query, fragment or unspecified address",
+        ));
+    }
+    Ok(())
+}
+
 impl FakeProvider {
     /// Start the fake on `config.listen` and serve until the process ends or the fake
     /// restarts.
@@ -181,7 +213,10 @@ impl FakeProvider {
         let listener = tokio::net::TcpListener::bind(config.listen).await?;
         let address = listener.local_addr()?;
         config.listen = address;
-        let base = Url::parse(&format!("http://{address}")).expect("a loopback URL");
+        let base = config.advertised_base.clone().unwrap_or_else(|| {
+            Url::parse(&format!("http://{address}")).expect("a socket-address HTTP URL")
+        });
+        validate_advertised_base(&base)?;
         let state = Arc::new(FakeState {
             base,
             secret: config.webhook_secret.clone(),
@@ -620,4 +655,100 @@ async fn output(
     headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(media_type));
     headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn advertised_base_accepts_only_concrete_http_origins() {
+        for value in [
+            "http://127.0.0.1:8803",
+            "http://[::1]:8803/",
+            "https://provider.example.test:17670/",
+        ] {
+            assert!(validate_advertised_base(&Url::parse(value).unwrap()).is_ok());
+        }
+        for value in [
+            "ftp://provider.example.test/",
+            "http://secret-user:secret-key@provider.example.test/",
+            "https://provider.example.test/api/",
+            "https://provider.example.test/?secret-query",
+            "https://provider.example.test/#secret-fragment",
+            "http://0.0.0.0:8803/",
+            "http://[::]:8803/",
+            "http://[::ffff:0.0.0.0]:8803/",
+            "http://provider.example.test:0/",
+        ] {
+            let error = validate_advertised_base(&Url::parse(value).unwrap()).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+            assert!(!error.to_string().contains("secret-"));
+        }
+    }
+
+    #[tokio::test]
+    async fn prediction_status_and_output_links_use_the_advertised_origin() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        for advertised_base in [
+            None,
+            Some(Url::parse("https://provider.example.test:17670/").unwrap()),
+        ] {
+            let fake = FakeProvider::start(FakeProviderConfig {
+                listen: "127.0.0.1:0".parse().unwrap(),
+                advertised_base: advertised_base.clone(),
+                webhook_secret: "whsec_fixture".into(),
+                delay: Duration::from_millis(1),
+                deliver: false,
+            })
+            .await
+            .unwrap();
+            let local = Url::parse(&format!("http://{}/", fake.config.listen)).unwrap();
+            assert_eq!(fake.base(), advertised_base.as_ref().unwrap_or(&local));
+            let submitted: Envelope<Prediction> = http
+                .post(local.join(&format!("api/v3/{IMAGE_MODEL}")).unwrap())
+                .json(&json!({"prompt": "a fixture image"}))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert_eq!(submitted.code, 200);
+            let id = &submitted.data.id;
+            let status_path = format!("api/v3/predictions/{id}/result");
+            assert_eq!(
+                submitted.data.urls.unwrap().get,
+                fake.base().join(&status_path).unwrap().to_string()
+            );
+            assert!(fake.finish(id));
+            let finished: Envelope<Prediction> = http
+                .get(local.join(&status_path).unwrap())
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert_eq!(finished.data.status, "completed");
+            assert_eq!(
+                finished.data.outputs,
+                [fake
+                    .base()
+                    .join(&format!("outputs/{id}/output-0.png"))
+                    .unwrap()
+                    .to_string()]
+            );
+            fake.stop.cancel();
+            let server = fake.server.lock().unwrap().take().unwrap();
+            tokio::time::timeout(STOP_TIMEOUT, server)
+                .await
+                .unwrap()
+                .unwrap();
+        }
+    }
 }

@@ -4248,7 +4248,7 @@ dependencies = [
 [[package]]
 name = "veoveo-hub-sdk"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=a1d9d653ae3d723821cdeeab92f4a67acdca39ce#a1d9d653ae3d723821cdeeab92f4a67acdca39ce"
+source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=026902ae73eaa56533dbc49bd66c39481c8b9494#026902ae73eaa56533dbc49bd66c39481c8b9494"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
@@ -4286,7 +4286,6 @@ dependencies = [
  "url",
  "uuid",
  "veoveo-audit-contract",
- "veoveo-oauth",
  "veoveo-store",
  "veoveo-task",
  "veoveo-types",
@@ -4308,7 +4307,7 @@ dependencies = [
 [[package]]
 name = "veoveo-mcp-artifact"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=4fc0cc9d10d504ee1200602070d3fed51a9df625#4fc0cc9d10d504ee1200602070d3fed51a9df625"
+source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=40e95be37b56b5e389a2b1dd908ef6c667aeae32#40e95be37b56b5e389a2b1dd908ef6c667aeae32"
 dependencies = [
  "anyhow",
  "aws-sdk-s3",
@@ -4382,21 +4381,6 @@ dependencies = [
  "veoveo-store",
  "veoveo-task",
  "veoveo-types",
-]
-
-[[package]]
-name = "veoveo-oauth"
-version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-core?rev=0e4f26ab0f15b27509bdf6a3796df2f8041cbfb0#0e4f26ab0f15b27509bdf6a3796df2f8041cbfb0"
-dependencies = [
- "jsonwebtoken",
- "schemars",
- "serde",
- "thiserror 2.0.21",
- "url",
- "uuid",
- "veoveo-types",
- "zeroize",
 ]
 
 [[package]]

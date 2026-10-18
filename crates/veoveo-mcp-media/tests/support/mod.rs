@@ -156,6 +156,7 @@ pub async fn harness_with(
 ) -> Harness {
     let fake = FakeProvider::start(FakeProviderConfig {
         listen: SocketAddr::from(([127, 0, 0, 1], 0)),
+        advertised_base: None,
         webhook_secret: WEBHOOK_SECRET.into(),
         delay: Duration::from_millis(100),
         deliver,

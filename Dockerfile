@@ -76,14 +76,41 @@ ARG COMPONENT
 RUN cargo build --locked --release --bin "${COMPONENT}" \
     && cp "target/release/${COMPONENT}" "/home/sandbox/${COMPONENT}"
 
-FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS runtime
+# A separate build enables the fixture only; the production build above never does.
+FROM source AS fake-provider-build
+RUN cargo build --locked --release --features testing --bin veoveo-mcp-media-fake-provider
+
+FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS runtime-base
+ARG COMPONENT
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log \
+    && useradd --system --uid 10001 --create-home --home-dir /var/lib/veoveo "${COMPONENT}" \
+    && mkdir -p /var/lib/veoveo/media/keys \
+    && chown -R "${COMPONENT}:${COMPONENT}" /var/lib/veoveo/media
+USER ${COMPONENT}
+
+FROM runtime-base AS fake-provider
+ARG VERSION
+ARG REVISION
+COPY --from=fake-provider-build /home/sandbox/src/target/release/veoveo-mcp-media-fake-provider /usr/local/bin/veoveo-mcp-media-fake-provider
+EXPOSE 8803
+ENTRYPOINT ["/usr/local/bin/veoveo-mcp-media-fake-provider"]
+LABEL org.opencontainers.image.title="veoveo-mcp-media-fake-provider" \
+      org.opencontainers.image.source="https://github.com/VeoveoAI/veoveo-mcp-media" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+# Keep production as the default final target.
+FROM runtime-base AS runtime
 ARG COMPONENT
 ARG VERSION
 ARG REVISION
-RUN useradd --system --uid 10001 --no-create-home "${COMPONENT}"
 COPY --from=build "/home/sandbox/${COMPONENT}" "/usr/local/bin/${COMPONENT}"
 USER ${COMPONENT}
 # The exec form cannot expand build arguments, so the binary path is fixed here.
+EXPOSE 8802
 ENTRYPOINT ["/usr/local/bin/veoveo-mcp-media"]
 LABEL org.opencontainers.image.title="${COMPONENT}" \
       org.opencontainers.image.source="https://github.com/VeoveoAI/${COMPONENT}" \

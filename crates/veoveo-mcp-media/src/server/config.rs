@@ -32,7 +32,7 @@ pub(super) struct Args {
     /// The Hub's RFC 8414 issuer; registration discovers its endpoint from there.
     #[arg(long, env = "VEOVEO_HUB_ISSUER")]
     pub hub_issuer: Url,
-    /// The installation's registration secret, or the placeholder the installation's edge replaces.
+    /// The installation's registration secret or native opaque initial-access reference.
     #[arg(
         long,
         env = "VEOVEO_REGISTRATION_SECRET",

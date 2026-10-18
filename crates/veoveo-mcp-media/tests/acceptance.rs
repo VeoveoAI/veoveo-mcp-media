@@ -3,11 +3,12 @@
 //! output stored in Artifact for the caller and its bytes read from the installation's
 //! object store through the URL Artifact signs.
 //!
-//! The tests need a running installation, so they are ignored by default. Inside the
-//! Media environment, set `VEOVEO_ACCEPTANCE_HUB` to the Hub origin and
-//! `VEOVEO_ACCEPTANCE_KEY_DIRECTORY` to the directory holding the callers' keys, then
-//! run `cargo nextest run --test acceptance --run-ignored only`. The fake-provider cases
-//! need Media running against the fake provider.
+//! Live cases are ignored by default. Use the native HTTPS `VEOVEO_ACCEPTANCE_HUB`
+//! and prepared `VEOVEO_ACCEPTANCE_{MEMBER,ADMIN}_BEARER_ENV` selectors, whose
+//! distinct variables hold bearer/opaque references. No caller signing keys are
+//! copied. The two fake-provider cases need the testing feature and Media configured
+//! for the private fake. They do not qualify deployed cancellation or restart recovery;
+//! see the README and the installation's execution checklist.
 //!
 //! One case bills the real provider once and runs only with
 //! `MEDIA_PROVIDER_QUALIFICATION=1`, against Media configured for the real provider:
@@ -17,7 +18,7 @@
 //! | `MEDIA_QUALIFICATION_MODEL` | The model to run, such as the one `tests/provider_qualification.rs` quotes lowest |
 //! | `MEDIA_QUALIFICATION_INPUT` | The model's input as a JSON object; by default a short prompt |
 //! | `MEDIA_QUALIFICATION_COMPLETION` | How the installation's Media learns outcomes: `events` with a public origin, `checks` without |
-use std::{path::PathBuf, time::Duration};
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use rmcp::{
@@ -34,15 +35,84 @@ use rmcp::{
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
-use veoveo_hub_sdk::client::{BearerSource as _, ClientCredentialsBearer, caller_signer};
+use veoveo_hub_sdk::client::{BearerSource as _, StaticBearer};
+use veoveo_mcp_artifact::contract::{CreateDownloadResult, SignedTransfer, TransferMethod};
 use veoveo_mcp_media::{
     contract::{CompletionMode, GenerationResult, ModelCatalogPage, PredictionView},
     fake::{IMAGE_BYTES, IMAGE_MODEL, output_byte},
 };
-use veoveo_types::{OAuthClientId, ScopeName};
 
-const MEMBER: &str = "acceptance-member";
-const ADMIN: &str = "acceptance-admin";
+#[derive(Clone, Copy)]
+enum CallerRole {
+    Member,
+    Admin,
+}
+
+struct AcceptanceBearers {
+    member: StaticBearer,
+    admin: Option<StaticBearer>,
+}
+
+impl AcceptanceBearers {
+    /// Injectable lookup keeps input regression tests independent of process state.
+    fn load(lookup: impl Fn(&str) -> Option<String>) -> Result<Self> {
+        ensure!(
+            lookup("VEOVEO_ACCEPTANCE_KEY_DIRECTORY").is_none(),
+            "VEOVEO_ACCEPTANCE_KEY_DIRECTORY is retired; supply prepared bearer inputs"
+        );
+        let member_env = lookup("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV")
+            .context("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV must name the member bearer variable")?;
+        let admin_env = lookup("VEOVEO_ACCEPTANCE_ADMIN_BEARER_ENV");
+        ensure!(
+            admin_env.as_ref() != Some(&member_env),
+            "member and admin bearer selectors must name distinct variables"
+        );
+        let member = Self::read(&lookup, &member_env, "member")?;
+        let admin = admin_env
+            .as_deref()
+            .map(|name| Self::read(&lookup, name, "admin"))
+            .transpose()?;
+        ensure!(
+            admin.as_ref() != Some(&member),
+            "member and admin bearer inputs must be distinct"
+        );
+        Ok(Self {
+            member: StaticBearer::new(member),
+            admin: admin.map(StaticBearer::new),
+        })
+    }
+
+    fn read(lookup: &impl Fn(&str) -> Option<String>, name: &str, role: &str) -> Result<String> {
+        ensure!(
+            !name.is_empty()
+                && name.bytes().enumerate().all(|(index, byte)| {
+                    byte == b'_'
+                        || byte.is_ascii_alphabetic()
+                        || (index > 0 && byte.is_ascii_digit())
+                }),
+            "{role} bearer selector must be an environment variable name"
+        );
+        let value = lookup(name).with_context(|| format!("{role} bearer variable is missing"))?;
+        ensure!(
+            !value.is_empty() && !value.chars().any(char::is_whitespace),
+            "{role} bearer variable must contain a nonempty bearer without whitespace"
+        );
+        Ok(value)
+    }
+
+    fn source(&self, role: CallerRole) -> Result<&StaticBearer> {
+        match role {
+            CallerRole::Member => Ok(&self.member),
+            CallerRole::Admin => self
+                .admin
+                .as_ref()
+                .context("VEOVEO_ACCEPTANCE_ADMIN_BEARER_ENV is required for admin qualification"),
+        }
+    }
+}
+
+const MEMBER: CallerRole = CallerRole::Member;
+const ADMIN: CallerRole = CallerRole::Admin;
 
 struct Caller;
 
@@ -59,7 +129,8 @@ type Client = RunningService<RoleClient, Caller>;
 
 struct Installation {
     hub: url::Url,
-    keys: PathBuf,
+    bearers: AcceptanceBearers,
+    http: reqwest::Client,
 }
 
 impl Installation {
@@ -68,11 +139,13 @@ impl Installation {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let hub = std::env::var("VEOVEO_ACCEPTANCE_HUB")
             .context("VEOVEO_ACCEPTANCE_HUB names the Hub origin")?;
-        let keys = std::env::var("VEOVEO_ACCEPTANCE_KEY_DIRECTORY")
-            .context("VEOVEO_ACCEPTANCE_KEY_DIRECTORY names the callers' key directory")?;
+        let bearers = AcceptanceBearers::load(|name| std::env::var(name).ok())?;
+        // Preserve ordinary certificate/name verification and provisioned native roots.
+        let http = reqwest::Client::builder().build()?;
         Ok(Self {
             hub: url::Url::parse(&hub)?,
-            keys: PathBuf::from(keys),
+            bearers,
+            http,
         })
     }
 
@@ -80,25 +153,41 @@ impl Installation {
         Ok(self.hub.join("/mcp/local")?)
     }
 
-    /// The caller's client-credentials token for the profile, through the SDK's bearer,
-    /// which discovers the token endpoint from the profile's metadata.
-    async fn token(&self, caller: &str) -> Result<String> {
-        let caller = OAuthClientId::parse(caller)?;
-        let signer = caller_signer(&self.keys, &caller)?;
-        let bearer = ClientCredentialsBearer::discover(
-            &self.mcp()?,
-            caller,
-            signer,
-            ScopeName::parse("mcp")?,
-            reqwest::Client::new(),
-        )
-        .await?;
-        Ok(bearer.caller_bearer().await?.expose().to_owned())
+    async fn token(&self, role: CallerRole) -> Result<String> {
+        Ok(self
+            .bearers
+            .source(role)?
+            .caller_bearer()
+            .await?
+            .expose()
+            .to_owned())
+    }
+
+    async fn download(&self, transfer: &SignedTransfer) -> Result<bytes::Bytes> {
+        ensure!(
+            transfer.method == TransferMethod::Get,
+            "Artifact must sign a GET"
+        );
+        let mut request = self.http.get(transfer.url.as_str());
+        for (name, value) in &transfer.headers {
+            request = request.header(name, value);
+        }
+        let response = request.send().await.map_err(reqwest::Error::without_url)?;
+        ensure!(
+            response.status().is_success(),
+            "signed download answered {}",
+            response.status()
+        );
+        response
+            .bytes()
+            .await
+            .map_err(reqwest::Error::without_url)
+            .context("reading signed download bytes")
     }
 
     /// Media's generation usage in `caller`'s own daily cost view at the Hub, from
     /// yesterday through tomorrow.
-    async fn generation_usage(&self, caller: &str) -> Result<GenerationUsage> {
+    async fn generation_usage(&self, caller: CallerRole) -> Result<GenerationUsage> {
         let token = self.token(caller).await?;
         let today = chrono::Utc::now().date_naive();
         let mut totals = GenerationUsage::default();
@@ -115,11 +204,7 @@ impl Installation {
                     query.append_pair("cursor", cursor);
                 }
             }
-            let response = reqwest::Client::new()
-                .get(url)
-                .bearer_auth(&token)
-                .send()
-                .await?;
+            let response = self.http.get(url).bearer_auth(&token).send().await?;
             let status = response.status();
             ensure!(status.is_success(), "the cost view answered {status}");
             let page: Value = response.json().await?;
@@ -144,9 +229,10 @@ impl Installation {
         }
     }
 
-    async fn connect(&self, caller: &str) -> Result<Client> {
+    async fn connect(&self, caller: CallerRole) -> Result<Client> {
         let token = self.token(caller).await?;
-        let transport = StreamableHttpClientTransport::from_config(
+        let transport = StreamableHttpClientTransport::with_client(
+            self.http.clone(),
             StreamableHttpClientTransportConfig::with_uri(self.mcp()?.to_string())
                 .auth_header(token),
         );
@@ -178,8 +264,7 @@ async fn call<T: DeserializeOwned>(
     let result = client.call_tool(tool(server, name, arguments)?).await?;
     ensure!(
         !result.is_error.unwrap_or(false),
-        "{name} returned an error: {:?}",
-        result.content
+        "{server}__{name} returned an error"
     );
     serde_json::from_value(result.structured_content.context("structured result")?)
         .with_context(|| format!("{name} returned a result of another shape"))
@@ -249,7 +334,7 @@ async fn generate(
             match task.task.status() {
                 TaskStatus::Working => tokio::time::sleep(Duration::from_millis(500)).await,
                 TaskStatus::Completed => return Ok::<_, anyhow::Error>(task),
-                status => bail!("the run reported {status:?}: {task:?}"),
+                status => bail!("the run reported {status:?}"),
             }
         }
     })
@@ -300,20 +385,14 @@ async fn a_run_through_the_hub_stores_its_output_in_artifact_with_its_cost() -> 
         .as_str()
         .strip_prefix("artifact://artifacts/")
         .context("an Artifact address")?;
-    let download: Value = call(
+    let download: CreateDownloadResult = call(
         &admin,
         "artifact",
         "create_download",
         json!({"artifactId": artifact_id}),
     )
     .await?;
-    let url = download["get"]["url"].as_str().context("a signed GET")?;
-    let bytes = reqwest::Client::new()
-        .get(url)
-        .send()
-        .await?
-        .bytes()
-        .await?;
+    let bytes = installation.download(&download.get).await?;
     ensure!(
         bytes
             .iter()
@@ -358,7 +437,7 @@ async fn a_member_browses_models_and_is_refused_the_billed_run() -> Result<()> {
     match member.call_tool_once(request).await {
         Err(ServiceError::McpError(_)) => Ok(()),
         Ok(CallToolResponse::Complete(result)) if result.is_error.unwrap_or(false) => Ok(()),
-        Ok(other) => bail!("run was served to the member: {other:?}"),
+        Ok(_) => bail!("run was served to the member"),
         Err(error) => Err(error).context("run failed without a refusal"),
     }
 }
@@ -397,21 +476,14 @@ async fn a_real_provider_run_through_the_hub_stores_its_output_and_records_its_c
             .as_str()
             .strip_prefix("artifact://artifacts/")
             .context("an Artifact address")?;
-        let download: Value = call(
+        let download: CreateDownloadResult = call(
             &admin,
             "artifact",
             "create_download",
             json!({"artifactId": artifact_id}),
         )
         .await?;
-        let url = download["get"]["url"].as_str().context("a signed GET")?;
-        let bytes = reqwest::Client::new()
-            .get(url)
-            .send()
-            .await?
-            .error_for_status()?
-            .bytes()
-            .await?;
+        let bytes = installation.download(&download.get).await?;
         ensure!(!bytes.is_empty(), "an output holds bytes");
         ensure!(
             output.size == Some(bytes.len() as u64),
@@ -454,4 +526,114 @@ async fn a_real_provider_run_through_the_hub_stores_its_output_and_records_its_c
         result.artifacts.len()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod bearer_inputs {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn load(entries: &[(&str, &str)]) -> Result<AcceptanceBearers> {
+        let values: BTreeMap<_, _> = entries.iter().copied().collect();
+        AcceptanceBearers::load(|name| values.get(name).map(|value| (*value).to_owned()))
+    }
+
+    #[tokio::test]
+    async fn selects_each_role_without_exposing_bearers() -> Result<()> {
+        let bearers = load(&[
+            ("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "MEMBER_REFERENCE"),
+            ("VEOVEO_ACCEPTANCE_ADMIN_BEARER_ENV", "ADMIN_REFERENCE"),
+            ("MEMBER_REFERENCE", "opaque-member-reference"),
+            ("ADMIN_REFERENCE", "opaque-admin-reference"),
+        ])?;
+        assert_eq!(
+            bearers.source(CallerRole::Member)?.caller_bearer().await?,
+            veoveo_hub_sdk::client::Bearer::new("opaque-member-reference")
+        );
+        assert_eq!(
+            bearers.source(CallerRole::Admin)?.caller_bearer().await?,
+            veoveo_hub_sdk::client::Bearer::new("opaque-admin-reference")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn member_only_input_does_not_require_admin_custody() -> Result<()> {
+        let bearers = load(&[
+            ("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "MEMBER_REFERENCE"),
+            ("MEMBER_REFERENCE", "opaque-member-reference"),
+        ])?;
+        assert!(bearers.source(CallerRole::Member).is_ok());
+        assert!(
+            bearers
+                .source(CallerRole::Admin)
+                .err()
+                .context("admin must be unavailable")?
+                .to_string()
+                .contains("ADMIN_BEARER_ENV")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_missing_invalid_ambiguous_and_retired_inputs_without_secret_diagnostics() {
+        let cases: &[&[(&str, &str)]] = &[
+            &[],
+            &[("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "MEMBER_REFERENCE")],
+            &[("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "secret-selector!")],
+            &[("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "9INVALID")],
+            &[
+                ("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "MEMBER_REFERENCE"),
+                ("MEMBER_REFERENCE", ""),
+            ],
+            &[
+                ("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "MEMBER_REFERENCE"),
+                ("MEMBER_REFERENCE", "secret with-whitespace"),
+            ],
+            &[
+                ("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "MEMBER_REFERENCE"),
+                ("VEOVEO_ACCEPTANCE_ADMIN_BEARER_ENV", "MEMBER_REFERENCE"),
+                ("MEMBER_REFERENCE", "secret-duplicate"),
+            ],
+            &[
+                ("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "MEMBER_REFERENCE"),
+                ("VEOVEO_ACCEPTANCE_ADMIN_BEARER_ENV", "ADMIN_REFERENCE"),
+                ("MEMBER_REFERENCE", "secret-duplicate"),
+                ("ADMIN_REFERENCE", "secret-duplicate"),
+            ],
+            &[
+                ("VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV", "MEMBER_REFERENCE"),
+                ("VEOVEO_ACCEPTANCE_ADMIN_BEARER_ENV", "ADMIN_REFERENCE"),
+                ("MEMBER_REFERENCE", "opaque-member-reference"),
+            ],
+            &[("VEOVEO_ACCEPTANCE_KEY_DIRECTORY", "secret-key-path")],
+        ];
+        let expected = [
+            "MEMBER_BEARER_ENV must name",
+            "member bearer variable is missing",
+            "member bearer selector must be an environment variable name",
+            "member bearer selector must be an environment variable name",
+            "member bearer variable must contain a nonempty bearer",
+            "member bearer variable must contain a nonempty bearer",
+            "selectors must name distinct variables",
+            "bearer inputs must be distinct",
+            "admin bearer variable is missing",
+            "KEY_DIRECTORY is retired",
+        ];
+        assert_eq!(cases.len(), expected.len());
+        for (entries, expected) in cases.iter().zip(expected) {
+            let error = load(entries)
+                .err()
+                .expect("invalid input must fail")
+                .to_string();
+            assert!(
+                !error.contains("secret"),
+                "credential data reached diagnostics"
+            );
+            assert!(
+                error.contains(expected),
+                "input rejected for the wrong reason: {error}"
+            );
+        }
+    }
 }
