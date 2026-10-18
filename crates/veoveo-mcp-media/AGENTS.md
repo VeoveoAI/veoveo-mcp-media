@@ -101,6 +101,6 @@ Contract: https://veoveo.ai/contracts/hosted-mcp
 - C28: met
 - C29: met — every replica runs the Task worker, the catalog refresh and the sweep; Task claims and FOR UPDATE SKIP LOCKED hand each Task and row to one replica
 - C30: met
-- C31: pending — installed Discover and list readiness qualification is pending
+- C31: met — native deployed revision `392c2c1` passed MCP Discover, tool listing, model catalog and model-schema discovery through Hub
 - C33: pending — Owner naming producers, consumers and installed qualification are pending.
 <!-- veoveo:contract-compliance:end -->

@@ -51,7 +51,7 @@ use veoveo_mcp_media::{
         FakeObservation, IMAGE_BYTES, IMAGE_MODEL, LARGE_BYTES, LARGE_MODEL, PRICE_USD, output_byte,
     },
 };
-use veoveo_types::{PrincipalId, WorkContextId};
+use veoveo_types::{PrincipalId, Sha256Digest, WorkContextId};
 
 #[derive(Clone, Copy)]
 enum CallerRole {
@@ -798,9 +798,9 @@ async fn verify_output(
         "the signed GET did not return the exact provider bytes"
     );
     use sha2::Digest as _;
-    let digest = hex::encode(sha2::Sha256::digest(&bytes));
+    let digest = Sha256Digest::from_bytes(sha2::Sha256::digest(&bytes).into());
     ensure!(
-        record.sha256.as_ref().map(ToString::to_string).as_deref() == Some(digest.as_str()),
+        record.sha256.as_ref() == Some(&digest),
         "Artifact checksum differs from downloaded bytes"
     );
     let view: PredictionView = read(client, &format!("media://prediction/{prediction}")).await?;
@@ -931,7 +931,8 @@ async fn catalog_schema_and_task_only_invocation_are_preserved() -> Result<()> {
             .await
         {
             Err(ServiceError::McpError(error)) => ensure!(
-                error.code == ErrorCode::MISSING_REQUIRED_CLIENT_CAPABILITY,
+                error.code == ErrorCode::INVALID_REQUEST
+                    && error.message == "run runs as a Task; call it with Task support",
                 "ordinary invocation was refused with another MCP error"
             ),
             Err(error) => {
