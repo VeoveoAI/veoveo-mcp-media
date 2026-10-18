@@ -28,15 +28,16 @@ use uuid::Uuid;
 use axum::{
     Json, Router,
     body::Body,
-    extract::{Path, Query, State},
+    extract::{Path, Query, Request, State},
     http::{HeaderValue, StatusCode, header},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use bytes::Bytes;
 use chrono::Utc;
 use futures::stream;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use url::Url;
 
@@ -135,6 +136,7 @@ fn fresh_identity() -> String {
 
 struct FakeState {
     base: Url,
+    api_bearer: Option<HeaderValue>,
     secret: String,
     deliver: AtomicBool,
     refuse_quotes: AtomicBool,
@@ -144,6 +146,11 @@ struct FakeState {
     submissions: AtomicU64,
     cancellations: AtomicU64,
     status_reads: AtomicU64,
+    quotes: AtomicU64,
+    pending_quotes: AtomicU64,
+    hold_quotes: tokio::sync::watch::Sender<bool>,
+    quote_started: tokio::sync::Notify,
+    output_reads: AtomicU64,
     predictions: Mutex<BTreeMap<String, Held>>,
     redirect: Mutex<Option<Url>>,
     http: reqwest::Client,
@@ -168,6 +175,8 @@ pub struct FakeProviderConfig {
     /// Public origin used in prediction status/output links. Omitted in-process
     /// fixtures advertise the bound socket; native exposures supply their HTTPS origin.
     pub advertised_base: Option<Url>,
+    /// Optional public fixture bearer required only by /api/v3/**. Never a real provider key.
+    pub api_bearer: Option<String>,
     /// The webhook secret, `whsec_` and the key.
     pub webhook_secret: String,
     /// How long a prediction runs before the fake posts its outcome.
@@ -217,8 +226,18 @@ impl FakeProvider {
             Url::parse(&format!("http://{address}")).expect("a socket-address HTTP URL")
         });
         validate_advertised_base(&base)?;
+        let api_bearer = config
+            .api_bearer
+            .as_ref()
+            .map(|value| {
+                HeaderValue::from_str(&format!("Bearer {value}")).map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid fake API bearer")
+                })
+            })
+            .transpose()?;
         let state = Arc::new(FakeState {
             base,
+            api_bearer,
             secret: config.webhook_secret.clone(),
             deliver: AtomicBool::new(config.deliver),
             refuse_quotes: AtomicBool::new(false),
@@ -227,6 +246,11 @@ impl FakeProvider {
             submissions: AtomicU64::new(0),
             cancellations: AtomicU64::new(0),
             status_reads: AtomicU64::new(0),
+            quotes: AtomicU64::new(0),
+            pending_quotes: AtomicU64::new(0),
+            hold_quotes: tokio::sync::watch::channel(false).0,
+            quote_started: tokio::sync::Notify::new(),
+            output_reads: AtomicU64::new(0),
             predictions: Mutex::new(BTreeMap::new()),
             redirect: Mutex::new(None),
             http: reqwest::Client::new(),
@@ -238,7 +262,19 @@ impl FakeProvider {
             .route("/api/v3/predictions/delete", post(cancel))
             .route("/api/v3/predictions/{prediction}/result", get(status))
             .route("/api/v3/{*model}", post(submit))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                api_authorization,
+            ))
             .route("/outputs/{prediction}/{file}", get(output))
+            // Testing feature only. Production provider admission must exclude this namespace.
+            .route("/testing/state", get(observe))
+            .route("/testing/quotes", post(control_quotes))
+            .route("/testing/delivery", post(control_delivery))
+            .route(
+                "/testing/predictions/{prediction}/complete",
+                post(control_complete),
+            )
             .with_state(state.clone());
         let stop = CancellationToken::new();
         let server = tokio::spawn({
@@ -298,6 +334,22 @@ impl FakeProvider {
     /// outputs again with `None`.
     pub fn redirect_outputs(&self, target: Option<Url>) {
         *self.state.redirect.lock().expect("fake redirect lock") = target;
+    }
+
+    /// Hold input quotes until explicitly released, independently of generation delivery.
+    pub fn hold_quotes(&self, hold: bool) {
+        self.state.hold_quotes.send_replace(hold);
+    }
+
+    /// An explicit in-process barrier: a quote reached the held response boundary.
+    pub async fn quote_is_held(&self) {
+        loop {
+            let notified = self.state.quote_started.notified();
+            if self.state.pending_quotes.load(Ordering::SeqCst) > 0 {
+                return;
+            }
+            notified.await;
+        }
     }
 
     /// Whether price quotes fail from now on, as an unavailable pricing service's do.
@@ -560,6 +612,21 @@ async fn price(
     State(state): State<Arc<FakeState>>,
     Json(request): Json<Value>,
 ) -> Json<Envelope<Value>> {
+    state.quotes.fetch_add(1, Ordering::SeqCst);
+    let mut hold = state.hold_quotes.subscribe();
+    if *hold.borrow_and_update() {
+        // Dropped HTTP requests must not leave a stale waiter in fixture observations.
+        struct Pending<'a>(&'a AtomicU64);
+        impl Drop for Pending<'_> {
+            fn drop(&mut self) {
+                self.0.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+        state.pending_quotes.fetch_add(1, Ordering::SeqCst);
+        let _pending = Pending(&state.pending_quotes);
+        state.quote_started.notify_one();
+        let _ = hold.wait_for(|held| !held).await;
+    }
     let model = request
         .get("model_id")
         .and_then(Value::as_str)
@@ -637,6 +704,7 @@ async fn output(
     if let Some(target) = state.redirect.lock().expect("fake redirect lock").clone() {
         return (StatusCode::FOUND, [(header::LOCATION, target.to_string())]).into_response();
     }
+    state.output_reads.fetch_add(1, Ordering::SeqCst);
     let (length, media_type) = if model.as_str() == LARGE_MODEL {
         (LARGE_BYTES, "video/mp4")
     } else {
@@ -655,6 +723,112 @@ async fn output(
     headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(media_type));
     headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
     response
+}
+
+async fn api_authorization(
+    State(state): State<Arc<FakeState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if state
+        .api_bearer
+        .as_ref()
+        .is_some_and(|expected| request.headers().get(header::AUTHORIZATION) != Some(expected))
+    {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    next.run(request).await
+}
+
+/// Test-only observations contain no prompts, callback URLs, credentials or output URLs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FakeObservation {
+    pub quotes: u64,
+    pub pending_quotes: u64,
+    pub submissions: u64,
+    pub cancellations: u64,
+    pub status_reads: u64,
+    pub output_reads: u64,
+    pub predictions: Vec<FakePrediction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FakePrediction {
+    pub prediction_id: MediaPredictionId,
+    pub status: String,
+}
+
+async fn observe(State(state): State<Arc<FakeState>>) -> Json<FakeObservation> {
+    let predictions = state.predictions.lock().expect("fake predictions lock");
+    Json(FakeObservation {
+        quotes: state.quotes.load(Ordering::SeqCst),
+        pending_quotes: state.pending_quotes.load(Ordering::SeqCst),
+        submissions: state.submissions.load(Ordering::SeqCst),
+        cancellations: state.cancellations.load(Ordering::SeqCst),
+        status_reads: state.status_reads.load(Ordering::SeqCst),
+        output_reads: state.output_reads.load(Ordering::SeqCst),
+        predictions: predictions
+            .values()
+            .map(|held| FakePrediction {
+                prediction_id: held.prediction.id.clone(),
+                status: held.prediction.status.clone(),
+            })
+            .collect(),
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct QuoteControl {
+    hold: bool,
+}
+
+async fn control_quotes(
+    State(state): State<Arc<FakeState>>,
+    Json(control): Json<QuoteControl>,
+) -> StatusCode {
+    state.hold_quotes.send_replace(control.hold);
+    StatusCode::NO_CONTENT
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeliveryControl {
+    automatic: bool,
+}
+
+async fn control_delivery(
+    State(state): State<Arc<FakeState>>,
+    Json(control): Json<DeliveryControl>,
+) -> StatusCode {
+    state.deliver.store(control.automatic, Ordering::SeqCst);
+    StatusCode::NO_CONTENT
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CompletionControl {
+    #[serde(default)]
+    deliver: bool,
+}
+
+async fn control_complete(
+    State(state): State<Arc<FakeState>>,
+    Path(prediction): Path<String>,
+    Json(control): Json<CompletionControl>,
+) -> StatusCode {
+    let Some(held) = finish(&state, &prediction) else {
+        return StatusCode::NOT_FOUND;
+    };
+    if !control.deliver {
+        return StatusCode::NO_CONTENT;
+    }
+    match post_webhook(&state, &held, &next_event(&state, &prediction), true).await {
+        Ok(status) => status,
+        Err(_) => StatusCode::BAD_GATEWAY,
+    }
 }
 
 #[cfg(test)]
@@ -688,6 +862,105 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn api_bearer_is_exact_and_does_not_gate_controls_or_outputs() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let fake = FakeProvider::start(FakeProviderConfig {
+            listen: "127.0.0.1:0".parse().unwrap(),
+            advertised_base: None,
+            api_bearer: Some("fake-generation-key".into()),
+            webhook_secret: "whsec_fixture".into(),
+            delay: Duration::from_millis(1),
+            deliver: false,
+        })
+        .await
+        .unwrap();
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let models = fake.base().join("api/v3/models").unwrap();
+        assert_eq!(
+            http.get(models.clone()).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            http.get(models.clone())
+                .bearer_auth("wrong-fixture-value")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            http.get(models)
+                .bearer_auth("fake-generation-key")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            http.get(fake.base().join("testing/state").unwrap())
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+        let prediction: Envelope<Prediction> = http
+            .post(fake.base().join(&format!("api/v3/{IMAGE_MODEL}")).unwrap())
+            .bearer_auth("fake-generation-key")
+            .json(&json!({"prompt":"not-in-observations"}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let id = prediction.data.id;
+        assert_eq!(
+            http.post(
+                fake.base()
+                    .join(&format!("testing/predictions/{id}/complete"))
+                    .unwrap()
+            )
+            .json(&json!({"deliver":false}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            http.get(
+                fake.base()
+                    .join(&format!("outputs/{id}/output-0.png"))
+                    .unwrap()
+            )
+            .send()
+            .await
+            .unwrap()
+            .status(),
+            StatusCode::OK
+        );
+        let observation: Value = http
+            .get(fake.base().join("testing/state").unwrap())
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(observation["submissions"], 1);
+        assert_eq!(observation["outputReads"], 1);
+        assert!(!observation.to_string().contains("not-in-observations"));
+        assert!(!observation.to_string().contains("fake-generation-key"));
+        assert!(!observation.to_string().contains("http"));
+    }
+
+    #[tokio::test]
     async fn prediction_status_and_output_links_use_the_advertised_origin() {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let http = reqwest::Client::builder()
@@ -701,6 +974,7 @@ mod tests {
             let fake = FakeProvider::start(FakeProviderConfig {
                 listen: "127.0.0.1:0".parse().unwrap(),
                 advertised_base: advertised_base.clone(),
+                api_bearer: None,
                 webhook_secret: "whsec_fixture".into(),
                 delay: Duration::from_millis(1),
                 deliver: false,

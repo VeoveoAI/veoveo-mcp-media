@@ -80,14 +80,15 @@ docker build --target fake-provider -t veoveo-mcp-media:fake-provider .
 
 ## Native Installation
 
-Native Media adoption is in preparation; these source changes claim no deployed
-qualification. Follow the installation-owned setup and policies in
-[veoveo-template-installation](../veoveo-template-installation/openshell/README.md)
+Native Media uses the qualified transport and private placement below. The
+expanded lifecycle probes require separate deployed evidence; source and component
+checks alone do not qualify them. Follow the installation-owned setup and policies in
+[veoveo-template-installation](../veoveo-template-installation/openshell/MEDIA.md)
 and the [Media execution plan](../veoveo-docs/OPENSHELL_HARDCUT_PLAN.md#media-native-integration-plan).
 Endpoint, provider and placement configuration belongs to that trusted
 installation, retaining the caller's existing Work Context.
 
-The planned service is private `vv-services/media`, listening on port 8802 and
+The service is private `vv-services/media`, listening on port 8802 and
 registering the logical endpoint `http://media.internal:8802/media/mcp` with Hub.
 Hub's startup-approved binding uses native authenticated forwarding; Media has no
 public MCP exposure. Registration uses a native opaque initial-access reference,
@@ -116,39 +117,110 @@ roots, authority and that endpoint from the actual sandboxes.
 
 ## Acceptance
 
-`tests/acceptance.rs` has two ignored fake-provider cases: an eligible admin caller
-runs the image model, downloads its Artifact output, reads the prediction and checks
-Task usage; an ordinary member browses models and is refused the billed run.
-`media.generations.run` is a billed permission, so native qualification must grant
-it deliberately to the selected test caller, together with Artifact delegation.
-Plain tool invocation is refused: `run` requires MCP Tasks.
+`tests/acceptance.rs` keeps qualification logic in Rust. The ordinary fake-provider
+suite checks catalog/schema discovery, the exact Hub billed-permission refusal for
+an ordinary member, Task-only invocation, acknowledged Working then pushed
+Completed, small and greater-than-20-MiB outputs, Artifact delegation/provenance and
+exact saved bytes, measured estimate/actual usage, and cancellation while a quote is
+held and after dispatch. A pushed completion is observed without `tasks/get`
+between the opening Working notification and the terminal notification.
 
-Use prepared native member/admin references with one explicit endpoint provider
-binding, as the installation's qualification profile permits. Select the variables
-containing those references; do not copy private caller signing keys:
+Use the installation's distinct member and billed-client opaque references.
+The existing `ADMIN` input selects that eligible billed test identity; it need not
+have administrative risks. The caller needs `media.generations.run` and Artifact
+read/write delegation. The member retains browsing and billed-run denial.
+Select environment variables containing references; do not copy signing keys:
 
 ```sh
 VEOVEO_ACCEPTANCE_HUB=https://vv-control--hub--http.openshell.localhost:17670 \
 VEOVEO_ACCEPTANCE_MEMBER_BEARER_ENV=HUB_MEMBER_REFERENCE \
 VEOVEO_ACCEPTANCE_ADMIN_BEARER_ENV=HUB_ADMIN_REFERENCE \
+VEOVEO_ACCEPTANCE_MEDIA_FIXTURE=https://vv-services--media-provider--http.openshell.localhost:17670 \
+VEOVEO_ACCEPTANCE_BILLED_PRINCIPAL='https://auth.localhost:8443/realms/veoveo#vv-hub-billed' \
 cargo nextest run --locked --features testing --test acceptance --run-ignored only \
-  -E 'not test(real_provider)' --test-threads 1
+  -E 'not (test(real_provider) or test(restart_persistence_) or test(a_running_generation_recovers_after_media_and_hub_restart))' \
+  --test-threads 1
 ```
 
-Run this inside the policy-approved native qualification sandbox after the
-installation supplies both reference variables and verified trust roots. Selectors
-and reference values must be distinct; the retired
-`VEOVEO_ACCEPTANCE_KEY_DIRECTORY` input is rejected. Member-only input is sufficient
-for the member case. Certificate/name verification stays enabled. A transport error
-is a failed operation, not proof of a Hub permission refusal. Native credential
-refresh may fence an existing connection; retain that evidence and make explicit
-fresh-client calls rather than replaying mutations automatically.
+Inside the native qualification sandbox, invoke the built test binary at its
+policy-approved path with those same nonsecret selectors and provider-injected
+reference variables:
 
-These two cases do not prove deployed cancellation, provider no-resubmission or
-native restart recovery. The component gate has those lifecycle regressions; the
-execution plan requires independent deployed proofs before qualifying Media.
-OpenCode/MiMo is reserved for the last bounded qualification after deterministic
-checks pass, with Task interoperability preflighted without model calls.
+```sh
+/sandbox/bin/media-acceptance --ignored --test-threads 1 --nocapture \
+  --skip real_provider --skip restart_persistence_ \
+  --skip a_running_generation_recovers_after_media_and_hub_restart
+```
+
+`VEOVEO_ACCEPTANCE_WORK_CONTEXT` defaults to `local` and
+`VEOVEO_ACCEPTANCE_LABELS` to the JSON array `[]`. Provenance is checked against
+these explicit expected inputs and the billed principal, rather than guessed from
+an opaque token. Signed download JSON TextContent must equal `structuredContent`;
+the test parses that text, then sends the exact GET URL and every signed header and
+checks bytes and SHA-256 without logging the URL. Tenant isolation remains a
+component-test claim in this one-tenant installation.
+
+The fake is testing-only. Its standalone binary checks the exact bearer configured
+by `MEDIA_FAKE_PROVIDER_API_BEARER` (default public test value
+`fake-generation-key`) on `/api/v3/**`. In-process fixtures can omit that check.
+This value is a fixture input, never a real provider key. Output GETs and controls
+are unaffected. The native service receives its provider credential through
+credential mediation; acceptance receives no provider credential. The controls
+below are admitted only to the trusted qualification executable, outside Media's
+`/api/v3/**` and `/outputs/**` policy:
+
+| Test-only route | Input / observation |
+|---|---|
+| `GET /testing/state` | Request counts and prediction IDs/status; no prompts, URLs or keys |
+| `POST /testing/quotes` | `{"hold":true}` or `{"hold":false}`; watch-based quote response barrier |
+| `POST /testing/delivery` | `{"automatic":false}` holds future outcomes for explicit completion |
+| `POST /testing/predictions/{id}/complete` | `{"deliver":false}` finishes status; `true` also uses the existing signed webhook delivery |
+
+Run all controlled cases serially. They use bounded state predicates, not assumed
+provider timing. Submission/output counts independently prove no duplicate work.
+The caller API does not expose an operation's cancellation receipt: the component
+case checks it through the Task runtime; deployed qualification requires a trusted
+operator's read-only receipt check using the printed Media Task ID. Do not add
+cross-schema queries or a product endpoint to the acceptance client.
+
+The deployed cancellation cases do not force a later successful provider outcome.
+`FakeProvider::finish` changes only `processing` predictions and leaves a cancelled
+prediction cancelled. The existing component cancellation case posts that cancelled
+state again as a later signed event and checks that the Task stays Cancelled; it
+does not simulate a late success after cancellation. No late-success deployment
+claim follows from these cases.
+
+For in-flight recovery, run only
+`a_running_generation_recovers_after_media_and_hub_restart` with `--ignored
+--exact --nocapture`. It prints and flushes the Working Task/prediction, closes its
+connection and waits on native Exec stdin. The trusted operator proves the old
+Media and Hub processes stopped, restarts the same approved sandboxes with retained
+state/keys, verifies readiness and identities, then sends exactly `continue` plus
+LF. The same Task must still be Working and the provider must still hold the same
+single pending prediction. A fresh acknowledged subscription opens on Working;
+only then does the test finish the provider and require pushed Completed, one
+output and the retained result. A missing marker times out; early completion is
+inconclusive and fails. The runner has no management credentials.
+
+Terminal persistence is separate: run `restart_persistence_prepare` alone, retain
+its standard `VEOVEO_MEDIA_RESTART_TASK_ID`, perform independently verified native
+Media/Hub restarts, then pass that variable to `restart_persistence_verify` alone.
+The verifier checks the retained Task/prediction/result, Artifact metadata and exact
+bytes, plus a newly opened subscription. Operator evidence must separately show
+unchanged registration public identity/key and approved volumes. This is terminal
+persistence, not proof of in-flight recovery.
+
+Certificate/name verification stays enabled. A transport error is a failed
+operation, not proof of permission refusal. For credential renewal, the trusted
+operator records initial expiry and actual verifier leeway, verifies automatic
+provider refresh without workload/provider restart, then invokes fresh member and
+billed clients through the same still-held opaque references after that boundary.
+Existing browsing/permission probes supply these fresh calls; no raw token or
+refresh loop belongs in this test. Native refresh may fence existing connections:
+retain interrupted-operation evidence and never replay mutations automatically.
+Run isolated restart proofs after an applied refresh with measured margin before
+the next update. OpenCode/MiMo remains the final bounded qualification only after
+deterministic tests, deployed probes and no-model Task interoperability all pass.
 
 ## Separate Real Provider Qualification
 

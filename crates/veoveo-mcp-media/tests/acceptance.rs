@@ -6,9 +6,11 @@
 //! Live cases are ignored by default. Use the native HTTPS `VEOVEO_ACCEPTANCE_HUB`
 //! and prepared `VEOVEO_ACCEPTANCE_{MEMBER,ADMIN}_BEARER_ENV` selectors, whose
 //! distinct variables hold bearer/opaque references. No caller signing keys are
-//! copied. The two fake-provider cases need the testing feature and Media configured
-//! for the private fake. They do not qualify deployed cancellation or restart recovery;
-//! see the README and the installation's execution checklist.
+//! copied. Fake-provider cases need the testing feature, the private controlled fake,
+//! and exact fixture/provenance inputs described in README. Run serially, excluding
+//! `restart_persistence_` and `a_running_generation_recovers_after_media_and_hub_restart`
+//! from the ordinary suite. The explicit restart phases need independently verified
+//! native lifecycle evidence; this file holds no deployment or management authority.
 //!
 //! One case bills the real provider once and runs only with
 //! `MEDIA_PROVIDER_QUALIFICATION=1`, against Media configured for the real provider:
@@ -24,11 +26,12 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use rmcp::{
     ClientHandler, ClientLifecycleMode, ClientServiceExt, RoleClient,
     model::{
-        CallToolRequestParams, CallToolResponse, ClientCapabilities, ClientConfig, GetTaskParams,
-        Implementation, ProtocolVersion, ReadResourceRequestParams, ResourceContents, TaskPayload,
-        TaskStatus,
+        CallToolRequestParams, CallToolResponse, CancelTaskParams, ClientCapabilities,
+        ClientConfig, DetailedTask, ErrorCode, GetTaskParams, Implementation, ProtocolVersion,
+        ReadResourceRequestParams, ResourceContents, ServerNotification, SubscriptionFilter,
+        TaskPayload, TaskStatus,
     },
-    service::{RunningService, ServiceError},
+    service::{RunningService, ServiceError, Subscription},
     transport::{
         StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
     },
@@ -36,11 +39,19 @@ use rmcp::{
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use veoveo_hub_sdk::client::{BearerSource as _, StaticBearer};
-use veoveo_mcp_artifact::contract::{CreateDownloadResult, SignedTransfer, TransferMethod};
-use veoveo_mcp_media::{
-    contract::{CompletionMode, GenerationResult, ModelCatalogPage, PredictionView},
-    fake::{IMAGE_BYTES, IMAGE_MODEL, output_byte},
+use veoveo_mcp_artifact::contract::{
+    ArtifactEntry, ArtifactLabels, CreateDownloadResult, SignedTransfer, TransferMethod,
 };
+use veoveo_mcp_media::{
+    contract::{
+        CompletionMode, GenerationResult, MediaPredictionId, ModelCatalogPage, ModelSchema,
+        PredictionStatus, PredictionView,
+    },
+    fake::{
+        FakeObservation, IMAGE_BYTES, IMAGE_MODEL, LARGE_BYTES, LARGE_MODEL, PRICE_USD, output_byte,
+    },
+};
+use veoveo_types::{PrincipalId, WorkContextId};
 
 #[derive(Clone, Copy)]
 enum CallerRole {
@@ -114,12 +125,19 @@ impl AcceptanceBearers {
 const MEMBER: CallerRole = CallerRole::Member;
 const ADMIN: CallerRole = CallerRole::Admin;
 
-struct Caller;
+struct Caller {
+    tasks: bool,
+}
 
 impl ClientHandler for Caller {
     fn get_info(&self) -> ClientConfig {
+        let capabilities = if self.tasks {
+            ClientCapabilities::builder().enable_tasks().build()
+        } else {
+            ClientCapabilities::default()
+        };
         ClientConfig::new(
-            ClientCapabilities::builder().enable_tasks().build(),
+            capabilities,
             Implementation::new("veoveo-mcp-media-acceptance", env!("CARGO_PKG_VERSION")),
         )
     }
@@ -141,7 +159,9 @@ impl Installation {
             .context("VEOVEO_ACCEPTANCE_HUB names the Hub origin")?;
         let bearers = AcceptanceBearers::load(|name| std::env::var(name).ok())?;
         // Preserve ordinary certificate/name verification and provisioned native roots.
-        let http = reqwest::Client::builder().build()?;
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_secs(120))
+            .build()?;
         Ok(Self {
             hub: url::Url::parse(&hub)?,
             bearers,
@@ -214,7 +234,10 @@ impl Installation {
                 }
                 let records = row["records"].as_u64().unwrap_or(0);
                 match row["phase"].as_str() {
-                    Some("estimate") => totals.estimates += records,
+                    Some("estimate") => {
+                        totals.estimates += records;
+                        totals.estimate_usd += amount(&row["money"]).unwrap_or(0.0);
+                    }
                     Some("actual") => {
                         totals.actuals += records;
                         totals.actual_usd += amount(&row["money"]).unwrap_or(0.0);
@@ -230,13 +253,17 @@ impl Installation {
     }
 
     async fn connect(&self, caller: CallerRole) -> Result<Client> {
+        self.connect_with_tasks(caller, true).await
+    }
+
+    async fn connect_with_tasks(&self, caller: CallerRole, tasks: bool) -> Result<Client> {
         let token = self.token(caller).await?;
         let transport = StreamableHttpClientTransport::with_client(
             self.http.clone(),
             StreamableHttpClientTransportConfig::with_uri(self.mcp()?.to_string())
                 .auth_header(token),
         );
-        Ok(Caller
+        Ok(Caller { tasks }
             .serve_with_lifecycle(
                 transport,
                 ClientLifecycleMode::Discover {
@@ -290,6 +317,7 @@ async fn read<T: DeserializeOwned>(client: &Client, uri: &str) -> Result<T> {
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 struct GenerationUsage {
     estimates: u64,
+    estimate_usd: f64,
     actuals: u64,
     actual_usd: f64,
 }
@@ -352,74 +380,15 @@ async fn generate(
 }
 
 #[tokio::test]
-#[ignore = "requires a running local installation with the fake provider"]
+#[ignore = "requires native fake-provider controls and an eligible billed caller"]
 async fn a_run_through_the_hub_stores_its_output_in_artifact_with_its_cost() -> Result<()> {
-    let installation = Installation::from_env()?;
-    let admin = installation.connect(ADMIN).await?;
-    let models: ModelCatalogPage = call(&admin, "media", "models", json!({})).await?;
-    ensure!(
-        models
-            .models
-            .iter()
-            .any(|model| model.model_id.as_str() == IMAGE_MODEL),
-        "the catalog lists the fake image model"
-    );
-    let (task_id, finished) = generate(
-        &admin,
-        IMAGE_MODEL,
-        json!({"prompt": "a lighthouse at dusk"}),
-        Duration::from_secs(120),
-    )
-    .await?;
-    let result: GenerationResult = serde_json::from_value(finished["result"].clone())?;
-    ensure!(result.artifacts.len() == 1, "the run stored one output");
-    let output = &result.artifacts[0];
-    ensure!(
-        output.size == Some(IMAGE_BYTES),
-        "the output keeps its size"
-    );
+    qualify_output(IMAGE_MODEL, IMAGE_BYTES).await.map(|_| ())
+}
 
-    // The output is the caller's in Artifact: they download it through Artifact.
-    let artifact_id = output
-        .artifact_uri
-        .as_str()
-        .strip_prefix("artifact://artifacts/")
-        .context("an Artifact address")?;
-    let download: CreateDownloadResult = call(
-        &admin,
-        "artifact",
-        "create_download",
-        json!({"artifactId": artifact_id}),
-    )
-    .await?;
-    let bytes = installation.download(&download.get).await?;
-    ensure!(
-        bytes
-            .iter()
-            .enumerate()
-            .all(|(offset, byte)| *byte == output_byte(offset as u64))
-            && bytes.len() as u64 == IMAGE_BYTES,
-        "the stored bytes are the provider's"
-    );
-
-    // The prediction is the caller's, and the Task carries the run's cost.
-    let prediction = result
-        .prediction
-        .prediction_id
-        .clone()
-        .context("the provider's prediction")?;
-    let view: PredictionView = read(&admin, &format!("media://prediction/{prediction}")).await?;
-    ensure!(view.result_uri.is_some(), "a succeeded run has a result");
-    let usage = finished["view"].to_string();
-    ensure!(
-        usage.contains("ai.veoveo/usage") && usage.contains("media.generation"),
-        "the Task carries its usage: {usage}"
-    );
-    eprintln!(
-        "run {task_id}: stored {} bytes as {}",
-        IMAGE_BYTES, output.artifact_uri
-    );
-    Ok(())
+#[tokio::test]
+#[ignore = "requires native fake-provider controls and an eligible billed caller"]
+async fn a_large_output_streams_through_artifact_with_exact_bytes() -> Result<()> {
+    qualify_output(LARGE_MODEL, LARGE_BYTES).await.map(|_| ())
 }
 
 #[tokio::test]
@@ -435,8 +404,19 @@ async fn a_member_browses_models_and_is_refused_the_billed_run() -> Result<()> {
         json!({"model": IMAGE_MODEL, "input": {"prompt": "x"}}),
     )?;
     match member.call_tool_once(request).await {
-        Err(ServiceError::McpError(_)) => Ok(()),
-        Ok(CallToolResponse::Complete(result)) if result.is_error.unwrap_or(false) => Ok(()),
+        Err(ServiceError::McpError(error)) => {
+            ensure!(
+                error.code == ErrorCode::INVALID_REQUEST
+                    && error
+                        .message
+                        .starts_with("You don't have permission to call `media__run`.")
+                    && error
+                        .message
+                        .contains("Your roles don't grant the permission this requires."),
+                "run failed with a different MCP error, not the expected Hub billed-permission refusal"
+            );
+            Ok(())
+        }
         Ok(_) => bail!("run was served to the member"),
         Err(error) => Err(error).context("run failed without a refusal"),
     }
@@ -526,6 +506,637 @@ async fn a_real_provider_run_through_the_hub_stores_its_output_and_records_its_c
         result.artifacts.len()
     );
     Ok(())
+}
+
+/// Every fixture condition is observed, with a deadline; delays only pace HTTP observations.
+impl Installation {
+    fn fixture(&self, path: &str) -> Result<url::Url> {
+        let origin = url::Url::parse(&std::env::var("VEOVEO_ACCEPTANCE_MEDIA_FIXTURE").context(
+            "VEOVEO_ACCEPTANCE_MEDIA_FIXTURE names the native HTTPS fake-provider origin",
+        )?)?;
+        ensure!(
+            origin.scheme() == "https"
+                && origin.has_host()
+                && origin.username().is_empty()
+                && origin.password().is_none()
+                && origin.path() == "/"
+                && origin.query().is_none()
+                && origin.fragment().is_none(),
+            "fixture must be an HTTPS origin without credentials, path, query or fragment"
+        );
+        Ok(origin.join(path)?)
+    }
+
+    async fn control(&self, path: &str, body: Value) -> Result<()> {
+        let response = self
+            .http
+            .post(self.fixture(path)?)
+            .json(&body)
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)?;
+        ensure!(
+            response.status().is_success(),
+            "fixture control answered {}",
+            response.status()
+        );
+        Ok(())
+    }
+
+    async fn observation(&self) -> Result<FakeObservation> {
+        let response = self
+            .http
+            .get(self.fixture("/testing/state")?)
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)?;
+        ensure!(
+            response.status().is_success(),
+            "fixture observation answered {}",
+            response.status()
+        );
+        Ok(response.json().await.map_err(reqwest::Error::without_url)?)
+    }
+
+    async fn observed(&self, ready: impl Fn(&FakeObservation) -> bool) -> Result<FakeObservation> {
+        bounded(30, async {
+            loop {
+                let observation = self.observation().await?;
+                if ready(&observation) {
+                    return Ok(observation);
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .context("waiting for an explicit fixture condition")
+    }
+
+    async fn controlled(&self) -> Result<()> {
+        self.control("/testing/quotes", json!({"hold":false}))
+            .await?;
+        self.control("/testing/delivery", json!({"automatic":false}))
+            .await
+    }
+
+    async fn finish_prediction(&self, prediction: &MediaPredictionId) -> Result<()> {
+        self.control(
+            &format!("/testing/predictions/{prediction}/complete"),
+            json!({"deliver":false}),
+        )
+        .await
+    }
+}
+
+async fn bounded<T>(seconds: u64, run: impl Future<Output = Result<T>>) -> Result<T> {
+    tokio::time::timeout(Duration::from_secs(seconds), run)
+        .await
+        .with_context(|| format!("qualification exceeded {seconds} seconds"))?
+}
+
+async fn start_run(client: &Client, model: &str) -> Result<String> {
+    match client
+        .call_tool_once(tool(
+            "media",
+            "run",
+            json!({"model":model,"input":{"prompt":"native deterministic qualification"}}),
+        )?)
+        .await?
+    {
+        CallToolResponse::Task(created) => Ok(created.task.task_id),
+        _ => bail!("media__run did not create a Task"),
+    }
+}
+
+async fn next_task(listener: &mut Subscription, task_id: &str) -> Result<DetailedTask> {
+    loop {
+        let notification = listener
+            .next()
+            .await?
+            .with_context(|| format!("Task {task_id} subscription ended: {:?}", listener.end()))?;
+        if let ServerNotification::TaskStatusNotification(notification) = notification {
+            ensure!(
+                notification.params.task.task.task_id == task_id,
+                "notification names another Task"
+            );
+            return Ok(notification.params.task);
+        }
+    }
+}
+
+async fn working(client: &Client, task_id: &str) -> Result<Subscription> {
+    let filter = SubscriptionFilter::builder().task_id(task_id).build();
+    let mut listener = client.listen(filter.clone()).await?;
+    ensure!(
+        listener.acknowledged() == &filter,
+        "Task filter was not acknowledged exactly"
+    );
+    ensure!(
+        next_task(&mut listener, task_id).await?.status() == TaskStatus::Working,
+        "the Task subscription must open on Working"
+    );
+    Ok(listener)
+}
+
+async fn terminal(
+    listener: &mut Subscription,
+    task_id: &str,
+    expected: TaskStatus,
+) -> Result<DetailedTask> {
+    loop {
+        let task = next_task(listener, task_id).await?;
+        if task.status() == TaskStatus::Working {
+            continue;
+        }
+        ensure!(
+            task.status() == expected,
+            "Task reported {:?}, expected {expected:?}",
+            task.status()
+        );
+        return Ok(task);
+    }
+}
+
+fn generation(task: &DetailedTask) -> Result<GenerationResult> {
+    let TaskPayload::Completed { result } = &task.payload else {
+        bail!("Task has no completed result")
+    };
+    Ok(serde_json::from_value(
+        result
+            .get("structuredContent")
+            .cloned()
+            .context("generation structured content")?,
+    )?)
+}
+
+async fn dispatched(
+    installation: &Installation,
+    before: &FakeObservation,
+) -> Result<MediaPredictionId> {
+    let observed = installation
+        .observed(|state| {
+            state.submissions > before.submissions && state.status_reads > before.status_reads
+        })
+        .await?;
+    ensure!(
+        observed.submissions == before.submissions + 1,
+        "provider received more than one submission"
+    );
+    let mut ids = observed.predictions.iter().filter(|prediction| {
+        !before
+            .predictions
+            .iter()
+            .any(|prior| prior.prediction_id == prediction.prediction_id)
+    });
+    let id = ids
+        .next()
+        .context("fixture received no new prediction")?
+        .prediction_id
+        .clone();
+    ensure!(
+        ids.next().is_none(),
+        "fixture received more than one prediction"
+    );
+    Ok(id)
+}
+
+async fn verify_output(
+    installation: &Installation,
+    client: &Client,
+    result: &GenerationResult,
+    model: &str,
+    length: u64,
+) -> Result<()> {
+    ensure!(
+        result.format == veoveo_mcp_media::contract::GENERATION_FORMAT
+            && result.artifacts.len() == 1,
+        "one typed output must belong to the generation format"
+    );
+    ensure!(
+        result.prediction.model_id.as_str() == model
+            && result.prediction.completion == Some(CompletionMode::Checks),
+        "the expected model must complete through configured status checks"
+    );
+    let prediction = result
+        .prediction
+        .prediction_id
+        .as_ref()
+        .context("provider prediction")?;
+    let artifact = &result.artifacts[0];
+    ensure!(
+        artifact.index == 0 && artifact.size == Some(length),
+        "output index/size differs"
+    );
+    let entry: ArtifactEntry = read(client, artifact.artifact_uri.as_str()).await?;
+    let owner = PrincipalId::parse(
+        std::env::var("VEOVEO_ACCEPTANCE_BILLED_PRINCIPAL")
+            .context("VEOVEO_ACCEPTANCE_BILLED_PRINCIPAL names the admitted billed caller")?,
+    )?;
+    let context = WorkContextId::parse(
+        std::env::var("VEOVEO_ACCEPTANCE_WORK_CONTEXT").unwrap_or_else(|_| "local".into()),
+    )?;
+    let labels: ArtifactLabels = serde_json::from_str(
+        &std::env::var("VEOVEO_ACCEPTANCE_LABELS").unwrap_or_else(|_| "[]".into()),
+    )?;
+    let record = &entry.artifact;
+    ensure!(
+        record.owner == owner
+            && record.provenance.caller == owner
+            && record.work_context == context
+            && record.labels == labels
+            && record
+                .provenance
+                .acting_server
+                .as_ref()
+                .map(|slug| slug.as_str())
+                == Some("media")
+            && record.provenance.task.as_ref().map(|id| id.as_str())
+                == Some(result.task_id.to_string().as_str()),
+        "Artifact owner/context/labels/Task delegation provenance differs from the admitted caller"
+    );
+    ensure!(
+        record.metadata.as_object().get("taskId") == Some(&json!(result.task_id.to_string()))
+            && record.metadata.as_object().get("predictionId") == Some(&json!(prediction.as_str()))
+            && record.metadata.as_object().get("modelId") == Some(&json!(model))
+            && record.metadata.as_object().get("outputIndex") == Some(&json!(0)),
+        "output provenance metadata differs"
+    );
+    let response = client
+        .call_tool(tool(
+            "artifact",
+            "create_download",
+            json!({"artifactId":record.artifact_id}),
+        )?)
+        .await?;
+    ensure!(
+        !response.is_error.unwrap_or(false),
+        "Artifact create_download returned a tool error"
+    );
+    let structured = response
+        .structured_content
+        .context("signed transfer structured content")?;
+    let text_value = response
+        .content
+        .iter()
+        .filter_map(|content| content.as_text())
+        .find_map(|text| serde_json::from_str::<Value>(&text.text).ok())
+        .context("signed transfer serialized JSON TextContent")?;
+    // Do not use assert_eq: its debug output would reveal a signed URL on failure.
+    ensure!(
+        text_value == structured,
+        "signed transfer JSON text differs from structuredContent"
+    );
+    let download: CreateDownloadResult = serde_json::from_value(text_value)
+        .map_err(|_| anyhow!("signed transfer JSON has another shape"))?;
+    let bytes = installation.download(&download.get).await?;
+    ensure!(
+        bytes.len() as u64 == length
+            && bytes
+                .iter()
+                .enumerate()
+                .all(|(offset, byte)| *byte == output_byte(offset as u64)),
+        "the signed GET did not return the exact provider bytes"
+    );
+    use sha2::Digest as _;
+    let digest = hex::encode(sha2::Sha256::digest(&bytes));
+    ensure!(
+        record.sha256.as_ref().map(ToString::to_string).as_deref() == Some(digest.as_str()),
+        "Artifact checksum differs from downloaded bytes"
+    );
+    let view: PredictionView = read(client, &format!("media://prediction/{prediction}")).await?;
+    ensure!(
+        view.prediction.task_id == result.task_id
+            && view.prediction.status == PredictionStatus::Succeeded
+            && view.prediction.output_count == 1,
+        "prediction does not retain the unique completed output"
+    );
+    eprintln!(
+        "Media Task {} prediction {prediction}: saved {length} bytes, sha256 {digest}",
+        result.task_id
+    );
+    Ok(())
+}
+
+async fn cleanup_run(installation: &Installation, task_id: Option<&str>) {
+    if let Some(task_id) = task_id {
+        let _ = bounded(10, async {
+            let caller = installation.connect(ADMIN).await?;
+            caller.cancel_task(CancelTaskParams::new(task_id)).await?;
+            Ok(())
+        })
+        .await;
+    }
+}
+
+async fn qualify_output(model: &str, length: u64) -> Result<String> {
+    let installation = Installation::from_env()?;
+    let mut cleanup_task = None;
+    let outcome = bounded(240, async {
+        installation.controlled().await?;
+        let before = installation.observation().await?;
+        let usage_before = installation.generation_usage(ADMIN).await?;
+        let caller = installation.connect(ADMIN).await?;
+        let task_id = start_run(&caller, model).await?;
+        cleanup_task = Some(task_id.clone());
+        let mut listener = working(&caller, &task_id).await?;
+        let prediction = dispatched(&installation, &before).await?;
+        installation.finish_prediction(&prediction).await?;
+        // No tasks/get between opening Working and this pushed completion.
+        let completed = terminal(&mut listener, &task_id, TaskStatus::Completed).await?;
+        let result = generation(&completed)?;
+        ensure!(
+            result.prediction.prediction_id.as_ref() == Some(&prediction),
+            "Task completed another prediction"
+        );
+        verify_output(&installation, &caller, &result, model, length).await?;
+        let retained = caller.get_task(GetTaskParams::new(&task_id)).await?.task;
+        ensure!(
+            retained.payload == completed.payload,
+            "completion was not retained"
+        );
+        let after = installation.observation().await?;
+        ensure!(
+            after.submissions == before.submissions + 1
+                && after.output_reads == before.output_reads + 1,
+            "provider submission/output transfer was duplicated"
+        );
+        let usage_after = installation.generation_usage(ADMIN).await?;
+        ensure!(
+            usage_after.estimates == usage_before.estimates + 1
+                && (usage_after.estimate_usd - usage_before.estimate_usd - PRICE_USD).abs() < 1e-9
+                && usage_after.actuals == usage_before.actuals + 1
+                && (usage_after.actual_usd - usage_before.actual_usd - PRICE_USD).abs() < 1e-9,
+            "the daily ledger did not gain one quote and actual generation charge"
+        );
+        let actual = task_usage(&serde_json::to_value(&completed)?)
+            .into_iter()
+            .find(|record| record["kind"] == "media.generation" && record["phase"] == "actual")
+            .context("Task actual generation usage")?;
+        ensure!(
+            actual["quantity"] == "1"
+                && actual["unit"] == "Requests"
+                && amount(&actual["money"]).is_some_and(|amount| (amount - PRICE_USD).abs() < 1e-9),
+            "Task actual quantity/unit or charge differs from one fake generation"
+        );
+        Ok(task_id)
+    })
+    .await;
+    if outcome.is_err() {
+        cleanup_run(&installation, cleanup_task.as_deref()).await;
+    }
+    outcome
+}
+
+#[tokio::test]
+#[ignore = "native fake-provider controls; run serially"]
+async fn catalog_schema_and_task_only_invocation_are_preserved() -> Result<()> {
+    bounded(60, async {
+        let installation = Installation::from_env()?;
+        let member = installation.connect(MEMBER).await?;
+        let catalog: ModelCatalogPage = call(&member, "media", "models", json!({})).await?;
+        ensure!(
+            catalog
+                .models
+                .iter()
+                .any(|model| model.model_id.as_str() == IMAGE_MODEL)
+                && catalog
+                    .models
+                    .iter()
+                    .any(|model| model.model_id.as_str() == LARGE_MODEL),
+            "expected fake models are missing"
+        );
+        let schema: ModelSchema = call(
+            &member,
+            "media",
+            "model_schema",
+            json!({"model":IMAGE_MODEL}),
+        )
+        .await?;
+        ensure!(
+            schema.model_id.as_str() == IMAGE_MODEL
+                && schema
+                    .request_schema
+                    .as_ref()
+                    .is_some_and(|schema| schema["required"] == json!(["prompt"])),
+            "model schema differs"
+        );
+        let ordinary = installation.connect_with_tasks(ADMIN, false).await?;
+        let before = installation.observation().await?;
+        match ordinary
+            .call_tool(tool(
+                "media",
+                "run",
+                json!({"model":IMAGE_MODEL,"input":{"prompt":"x"}}),
+            )?)
+            .await
+        {
+            Err(ServiceError::McpError(error)) => ensure!(
+                error.code == ErrorCode::MISSING_REQUIRED_CLIENT_CAPABILITY,
+                "ordinary invocation was refused with another MCP error"
+            ),
+            Err(error) => {
+                return Err(error)
+                    .context("ordinary invocation failed without a Task-required refusal");
+            }
+            Ok(_) => bail!("ordinary call reached Task-only run"),
+        }
+        ensure!(
+            installation.observation().await?.submissions == before.submissions,
+            "ordinary call reached provider"
+        );
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+#[ignore = "native fixture held-quote barrier; run serially"]
+async fn cancellation_during_a_held_quote_never_submits_to_the_provider() -> Result<()> {
+    let installation = Installation::from_env()?;
+    let mut cleanup_task = None;
+    let outcome = bounded(120, async {
+        installation.controlled().await?;
+        let before = installation.observation().await?;
+        installation
+            .control("/testing/quotes", json!({"hold":true}))
+            .await?;
+        let caller = installation.connect(ADMIN).await?;
+        let task_id = start_run(&caller, IMAGE_MODEL).await?;
+        cleanup_task = Some(task_id.clone());
+        let mut listener = working(&caller, &task_id).await?;
+        installation
+            .observed(|state| state.pending_quotes > before.pending_quotes)
+            .await?;
+        caller.cancel_task(CancelTaskParams::new(&task_id)).await?;
+        installation
+            .control("/testing/quotes", json!({"hold":false}))
+            .await?;
+        terminal(&mut listener, &task_id, TaskStatus::Cancelled).await?;
+        let after = installation.observation().await?;
+        ensure!(
+            after.submissions == before.submissions
+                && after.cancellations == before.cancellations
+                && after.output_reads == before.output_reads,
+            "cancelled quote dispatched or published output"
+        );
+        Ok(())
+    })
+    .await;
+    // Deadline cancellation drops the probe future, so cleanup must live outside it.
+    // Cancel our Task before releasing a quote if the probe stopped before its cancel RPC.
+    if outcome.is_err() {
+        cleanup_run(&installation, cleanup_task.as_deref()).await;
+    }
+    let released = bounded(
+        10,
+        installation.control("/testing/quotes", json!({"hold":false})),
+    )
+    .await;
+    outcome.and(released)
+}
+
+#[tokio::test]
+#[ignore = "native fixture controlled completion; run serially"]
+async fn cancellation_after_dispatch_reaches_the_provider_without_publishing_output() -> Result<()>
+{
+    let installation = Installation::from_env()?;
+    let mut cleanup_task = None;
+    let outcome = bounded(120, async {
+        installation.controlled().await?;
+        let before = installation.observation().await?;
+        let caller = installation.connect(ADMIN).await?;
+        let task_id = start_run(&caller, IMAGE_MODEL).await?;
+        cleanup_task = Some(task_id.clone());
+        let mut listener = working(&caller, &task_id).await?;
+        let prediction = dispatched(&installation, &before).await?;
+        caller.cancel_task(CancelTaskParams::new(&task_id)).await?;
+        terminal(&mut listener, &task_id, TaskStatus::Cancelled).await?;
+        let after = installation.observed(|state| state.cancellations > before.cancellations).await?;
+        ensure!(after.submissions == before.submissions + 1 && after.cancellations == before.cancellations + 1
+            && after.output_reads == before.output_reads && after.predictions.iter().any(|entry| entry.prediction_id == prediction && entry.status == "cancelled"),
+            "provider cancellation/submission/output evidence differs");
+        let view: PredictionView = read(&caller, &format!("media://prediction/{prediction}")).await?;
+        ensure!(view.prediction.status == PredictionStatus::Cancelled && view.prediction.output_count == 0,
+            "cancelled prediction published output");
+        eprintln!("Cancelled Hub Task {task_id}, Media Task {} prediction {prediction}; trusted operator verifies stored operation receipt", view.prediction.task_id);
+        Ok(())
+    }).await;
+    if outcome.is_err() {
+        cleanup_run(&installation, cleanup_task.as_deref()).await;
+    }
+    outcome
+}
+
+#[tokio::test]
+#[ignore = "isolated external Media and Hub restart; exact continue line required"]
+async fn a_running_generation_recovers_after_media_and_hub_restart() -> Result<()> {
+    let installation = Installation::from_env()?;
+    let mut cleanup_task = None;
+    let outcome = bounded(360, async {
+        installation.controlled().await?;
+        let before = installation.observation().await?;
+        let caller = installation.connect(ADMIN).await?;
+        let task_id = start_run(&caller, IMAGE_MODEL).await?;
+        cleanup_task = Some(task_id.clone());
+        let initial = working(&caller, &task_id).await?;
+        // A provider status read occurs only after the operation was durably dispatched and parked.
+        let prediction = dispatched(&installation, &before).await?;
+        drop(initial);
+        caller.cancel().await?;
+        println!("Working Task {task_id}, prediction {prediction}; ready for trusted Media and Hub restart; waiting for continue");
+        std::io::Write::flush(&mut std::io::stdout()).context("flushing restart readiness")?;
+        continue_after_restart().await?;
+
+        let resumed = installation.connect(ADMIN).await?;
+        let current = resumed.get_task(GetTaskParams::new(&task_id)).await
+            .context("reading the same Task after the trusted restart boundary")?.task;
+        ensure!(current.status() == TaskStatus::Working,
+            "inconclusive restart evidence: the same Task is {:?}, not Working", current.status());
+        let mut listener = working(&resumed, &task_id).await.context("reopening the Working Task subscription")?;
+        let state = installation.observation().await?;
+        ensure!(state.submissions == before.submissions + 1 && state.output_reads == before.output_reads
+            && state.predictions.iter().any(|entry| entry.prediction_id == prediction && entry.status == "processing"),
+            "the parked generation was resubmitted or completed before release");
+        eprintln!("Task {task_id}: Working after verified restart, same provider prediction; waiting for pushed completion");
+        installation.finish_prediction(&prediction).await?;
+        let completed = terminal(&mut listener, &task_id, TaskStatus::Completed).await.context("waiting for pushed completion after restart")?;
+        let result = generation(&completed)?;
+        ensure!(result.prediction.prediction_id.as_ref() == Some(&prediction), "recovered result names another prediction");
+        verify_output(&installation, &resumed, &result, IMAGE_MODEL, IMAGE_BYTES).await?;
+        let fresh = installation.connect(ADMIN).await?;
+        let retained = fresh.get_task(GetTaskParams::new(&task_id)).await?.task;
+        ensure!(retained.payload == completed.payload, "recovered completion was not retained");
+        let state = installation.observation().await?;
+        ensure!(state.submissions == before.submissions + 1 && state.output_reads == before.output_reads + 1,
+            "the recovered generation or output was duplicated");
+        eprintln!("Task {task_id}: one independently observed submission, Working after restart, pushed Completed, one output and retained result");
+        Ok(())
+    }).await;
+    if outcome.is_err()
+        && let Some(task_id) = cleanup_task
+    {
+        let _ = bounded(10, async {
+            let caller = installation.connect(ADMIN).await?;
+            caller.cancel_task(CancelTaskParams::new(task_id)).await?;
+            Ok(())
+        })
+        .await;
+    }
+    outcome
+}
+
+async fn continue_after_restart() -> Result<()> {
+    let (send, receive) = tokio::sync::oneshot::channel();
+    // A detached standard reader cannot keep a timed-out Tokio runtime alive.
+    std::thread::Builder::new()
+        .name("media-restart-continue".into())
+        .spawn(move || {
+            let mut input = std::io::Read::take(std::io::stdin().lock(), 64);
+            let mut line = Vec::new();
+            let result = std::io::BufRead::read_until(&mut input, b'\n', &mut line)
+                .context("reading Media restart continuation")
+                .and_then(|_| {
+                    ensure!(
+                        line == b"continue\n",
+                        "restart continuation must be exactly continue followed by LF"
+                    );
+                    Ok(())
+                });
+            let _ = send.send(result);
+        })
+        .context("starting bounded restart continuation reader")?;
+    receive.await.context("restart continuation reader ended")?
+}
+
+#[tokio::test]
+#[ignore = "explicit terminal prepare phase before trusted Media and Hub restarts"]
+async fn restart_persistence_prepare() -> Result<()> {
+    let task_id = qualify_output(IMAGE_MODEL, IMAGE_BYTES).await?;
+    println!("VEOVEO_MEDIA_RESTART_TASK_ID={task_id}");
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "explicit terminal verify phase after trusted Media and Hub restarts"]
+async fn restart_persistence_verify() -> Result<()> {
+    bounded(120, async {
+        let task_id = std::env::var("VEOVEO_MEDIA_RESTART_TASK_ID").context("VEOVEO_MEDIA_RESTART_TASK_ID from the prepare phase")?;
+        let installation = Installation::from_env()?;
+        let caller = installation.connect(ADMIN).await?;
+        let retained = caller.get_task(GetTaskParams::new(&task_id)).await?.task;
+        ensure!(retained.status() == TaskStatus::Completed, "prepared Task did not retain Completed");
+        let result = generation(&retained)?;
+        let filter = SubscriptionFilter::builder().task_id(&task_id).build();
+        let mut listener = caller.listen(filter.clone()).await?;
+        ensure!(listener.acknowledged() == &filter, "retained Task filter was not acknowledged");
+        ensure!(next_task(&mut listener, &task_id).await?.payload == retained.payload,
+            "fresh Task subscription did not open with retained completion");
+        let stored: GenerationResult = read(&caller, &result.result_uri.to_string()).await?;
+        ensure!(stored == result, "retained prediction result differs from retained Task completion");
+        verify_output(&installation, &caller, &result, IMAGE_MODEL, IMAGE_BYTES).await?;
+        eprintln!("Task {task_id}: terminal result, prediction, Artifact metadata/bytes and fresh subscription retained");
+        Ok(())
+    }).await
 }
 
 #[cfg(test)]

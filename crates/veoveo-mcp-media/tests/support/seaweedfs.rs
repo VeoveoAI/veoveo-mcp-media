@@ -8,6 +8,7 @@ use std::{
     net::TcpListener,
     path::PathBuf,
     process::{Child, Command, Stdio},
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -24,9 +25,10 @@ const GRPC_PORT_OFFSET: u16 = 10_000;
 
 /// One SeaweedFS process and its data directory, removed on drop.
 pub struct TestSeaweedFs {
-    child: Child,
+    child: Mutex<Child>,
     dir: PathBuf,
     endpoint: Url,
+    ports: [u16; 5],
 }
 
 impl TestSeaweedFs {
@@ -49,7 +51,8 @@ impl TestSeaweedFs {
         std::fs::write(&config, identities.to_string()).expect("SeaweedFS S3 identities");
         let deadline = Instant::now() + Duration::from_secs(30);
         for _ in 0..3 {
-            let [master, volume, filer, s3, admin] = free_ports();
+            let ports = free_ports();
+            let [master, volume, filer, s3, admin] = ports;
             let stderr =
                 std::fs::File::create(dir.join("stderr.log")).expect("SeaweedFS stderr log");
             let port = |name: &str, port: u16| format!("-{name}={port}");
@@ -80,9 +83,10 @@ impl TestSeaweedFs {
             let endpoint = Url::parse(&format!("http://127.0.0.1:{s3}")).unwrap();
             if answers(&mut child, &endpoint, &dir, deadline).await {
                 return Self {
-                    child,
+                    child: Mutex::new(child),
                     dir,
                     endpoint,
+                    ports,
                 };
             }
             // SeaweedFS exited, most likely because another process took a port.
@@ -114,10 +118,32 @@ impl TestSeaweedFs {
     /// A prepared fresh bucket.
     pub async fn storage(&self) -> ObjectStorage {
         let storage = ObjectStorage::new(&self.config()).expect("test storage configuration");
-        storage
-            .prepare_within(Duration::from_secs(30))
-            .await
-            .expect("prepare the test bucket");
+        let started = Instant::now();
+        if let Err(error) = storage.prepare_within(Duration::from_secs(30)).await {
+            let elapsed = started.elapsed();
+            let (pid, status) = {
+                let mut child = self.child.lock().expect("SeaweedFS child lock");
+                (child.id(), child.try_wait())
+            };
+            // Observe liveness before Drop removes the fixture, without printing weed logs,
+            // S3 headers/bodies or a chained SDK error that could contain signing material.
+            let http = reqwest::Client::builder()
+                .timeout(Duration::from_secs(1))
+                .build()
+                .expect("SeaweedFS diagnostic client");
+            let s3 = match http.get(self.endpoint.as_str()).send().await {
+                Ok(response) => format!("HTTP {}", response.status().as_u16()),
+                Err(error) if error.is_timeout() => "transport timeout".into(),
+                Err(error) if error.is_connect() => "transport connect failure".into(),
+                Err(_) => "transport failure".into(),
+            };
+            panic!(
+                "prepare the test bucket: {error}; preparation elapsed {elapsed:?}; \
+                 weed pid {pid}, status {status:?}; \
+                 ports [master, volume, filer, s3, admin] {:?}; S3 probe {s3}",
+                self.ports,
+            );
+        }
         storage
     }
 }
@@ -179,8 +205,9 @@ async fn answers(
 
 impl Drop for TestSeaweedFs {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let child = self.child.get_mut().expect("SeaweedFS child lock");
+        let _ = child.kill();
+        let _ = child.wait();
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }

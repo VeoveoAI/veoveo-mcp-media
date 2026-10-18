@@ -239,6 +239,37 @@ async fn a_run_parked_across_a_restart_resumes_on_another_worker_without_resubmi
 }
 
 #[tokio::test]
+async fn cancellation_while_a_quote_is_held_never_dispatches_a_generation() {
+    within(async {
+        let harness = harness(false).await;
+        harness.fake().hold_quotes(true);
+        let task = harness.run(IMAGE_MODEL, prompt()).await;
+        harness.fake().quote_is_held().await;
+        harness
+            .tasks()
+            .cancel_task(&forwarded_user(), task.clone())
+            .await
+            .unwrap();
+        harness.fake().hold_quotes(false);
+        let cancelled = harness
+            .until(&task, |view| view["status"] == "cancelled")
+            .await;
+        assert_eq!(cancelled["status"], "cancelled");
+        assert_eq!(
+            harness.fake().submissions(),
+            0,
+            "cancelled during the held quote, before dispatch"
+        );
+        assert_eq!(
+            harness.fake().cancellations(),
+            0,
+            "no external job existed to cancel"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn cancelling_a_dispatched_run_reaches_the_provider_and_keeps_its_receipt() {
     within(async {
         let harness = harness(false).await;

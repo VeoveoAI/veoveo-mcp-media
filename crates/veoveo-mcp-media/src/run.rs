@@ -412,6 +412,13 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
                 Err(error) => return Err(error),
             },
         };
+        // A quote is an external await: cancellation may arrive while it is held.
+        // Stop before any dispatch; never add this check between dispatch and ctx.wait.
+        match ctx.checkpoint().await {
+            Ok(()) => {}
+            Err(TaskStop::Cancelled) => return Ok(TaskTransition::Cancelled),
+            Err(stop) => return Err(stop.into()),
+        }
         ctx.usage()?
             .estimate(MediaUsage::Generation, Quantity::whole(1))
             .money(usd(price)?)

@@ -21,6 +21,14 @@ struct Args {
     /// Origin used in status/output links, independent of the local listener.
     #[arg(long, env = "MEDIA_FAKE_PROVIDER_ADVERTISED_BASE")]
     advertised_base: Option<url::Url>,
+    /// Public test input, checked only for provider API calls; never a real provider key.
+    #[arg(
+        long,
+        env = "MEDIA_FAKE_PROVIDER_API_BEARER",
+        default_value = "fake-generation-key",
+        hide_env_values = true
+    )]
+    api_bearer: String,
     #[arg(long, env = "MEDIA_PROVIDER_WEBHOOK_SECRET", hide_env_values = true)]
     webhook_secret: String,
     /// How long a prediction runs before its outcome is posted, in milliseconds.
@@ -35,6 +43,7 @@ async fn main() -> anyhow::Result<()> {
     let fake = FakeProvider::start(FakeProviderConfig {
         listen: args.listen,
         advertised_base: args.advertised_base,
+        api_bearer: Some(args.api_bearer),
         webhook_secret: args.webhook_secret,
         delay: Duration::from_millis(args.delay_ms),
         deliver: true,
