@@ -1,139 +1,155 @@
-//! Reads of Media's resources. The catalog reads come from the current registry snapshot;
-//! every prediction read is private to its caller, because the run's Task decides who
-//! may see it.
-use rmcp::{
-    ErrorData as McpError, RoleServer, model::ReadResourceRequestParams, service::RequestContext,
+//! Typed readers preserve current owner and label admission on every request.
+use rmcp::{ErrorData as McpError, RoleServer, service::RequestContext};
+use veoveo_hub_sdk::{
+    definition::ReadCollection,
+    hosting::{ReadCache, ResourceBuilder, RoutePolicy, RoutesBuilder, hub_identity},
 };
-use veoveo_hub_sdk::hosting::{DomainRead, json_read, served_by_host};
-
-use crate::{
-    contract::{
-        GENERATION_FORMAT, GenerationResult, MediaResource, ModelsRequest, PredictionEntry,
-        PredictionListing, PredictionStatus, PredictionView,
-    },
-    predictions::Prediction,
-};
+use veoveo_types::Page;
 
 use super::{
-    MediaApp,
+    MediaMcp,
     errors::{catalog_error, prediction_error, store_error},
     identity,
-    requirements::{Target, require},
+};
+use crate::contract::{
+    GENERATION_FORMAT, GenerationResult, MediaPermission, ModelCatalog, ModelFilters, ModelSchema,
+    PredictionCollection, PredictionStatus, PredictionView, ReadModel, ReadModels, ReadPrediction,
+    ReadPredictions, ReadResult,
 };
 
-fn missing() -> McpError {
-    McpError::invalid_params("no such prediction", None)
+pub(super) fn register(routes: RoutesBuilder<MediaMcp>) -> RoutesBuilder<MediaMcp> {
+    let models = || RoutePolicy::permission(MediaPermission::ModelsRead).expect("Media permission");
+    let predictions =
+        || RoutePolicy::permission(MediaPermission::PredictionsRead).expect("Media permission");
+    routes
+        .collection_resource::<ReadModels, _, _>(
+            Some(ReadModels {
+                filters: ModelFilters::default(),
+            }),
+            ResourceBuilder::new("Models")
+                .reader(read_models)
+                .policy(models())
+                .cache(ReadCache::NoStore),
+        )
+        .template::<ReadModel, _, _>(
+            ResourceBuilder::new("Model")
+                .reader(read_model)
+                .policy(models())
+                .cache(ReadCache::NoStore),
+        )
+        .collection_resource::<ReadPredictions, _, _>(
+            Some(ReadPredictions),
+            ResourceBuilder::new("Your predictions")
+                .reader(read_predictions)
+                .policy(predictions())
+                .cache(ReadCache::NoStore),
+        )
+        .template::<ReadPrediction, _, _>(
+            ResourceBuilder::new("Prediction")
+                .reader(read_prediction)
+                .policy(predictions())
+                .cache(ReadCache::NoStore),
+        )
+        .template::<ReadResult, _, _>(
+            ResourceBuilder::new("Generation result")
+                .reader(read_result)
+                .policy(predictions())
+                .cache(ReadCache::NoStore),
+        )
 }
 
-pub(super) async fn read(
-    app: &MediaApp,
-    address: MediaResource,
-    request: &ReadResourceRequestParams,
-    context: &RequestContext<RoleServer>,
-) -> Result<DomainRead, McpError> {
-    let uri = request.uri.as_str();
-    let result = match address {
-        MediaResource::Docs | MediaResource::Document(_) | MediaResource::Contract => {
-            return Err(served_by_host());
-        }
-        MediaResource::Models {
-            query,
-            model_type,
-            limit,
-            cursor,
-        } => {
-            require(context, Target::Resource(uri))?;
-            let snapshot = app.catalog.snapshot().map_err(catalog_error)?;
-            let page = snapshot
-                .page(&ModelsRequest {
-                    query,
-                    model_type,
-                    limit,
-                    cursor,
-                })
-                .map_err(catalog_error)?;
-            json_read(uri, &page)?
-        }
-        MediaResource::Model(model) => {
-            require(context, Target::Resource(uri))?;
-            let snapshot = app.catalog.snapshot().map_err(catalog_error)?;
-            json_read(uri, &snapshot.schema(&model).map_err(catalog_error)?)?
-        }
-        MediaResource::Predictions { cursor } => {
-            let identity = require(context, Target::Resource(uri))?;
-            let page = app
-                .predictions
-                .page(&identity::task_owner(&identity)?, cursor.as_ref())
-                .await
-                .map_err(prediction_error)?;
-            let predictions = page.items.iter().map(entry).collect::<Result<_, _>>()?;
-            json_read(
-                uri,
-                &PredictionListing {
-                    predictions,
-                    next_cursor: page.next,
-                },
-            )?
-        }
-        MediaResource::Prediction(prediction) => {
-            let identity = require(context, Target::Resource(uri))?;
-            let found = app
-                .predictions
-                .prediction(&identity::task_owner(&identity)?, &prediction)
-                .await
-                .map_err(prediction_error)?
-                .ok_or_else(missing)?;
-            let summary = found.summary().map_err(store_error)?;
-            let result_uri = (summary.status == PredictionStatus::Succeeded)
-                .then(|| MediaResource::Result(prediction.clone()));
-            json_read(
-                uri,
-                &PredictionView {
-                    prediction: summary,
-                    result_uri,
-                },
-            )?
-        }
-        MediaResource::Result(prediction) => {
-            let identity = require(context, Target::Resource(uri))?;
-            let found = app
-                .predictions
-                .prediction(&identity::task_owner(&identity)?, &prediction)
-                .await
-                .map_err(prediction_error)?
-                .ok_or_else(missing)?;
-            let summary = found.summary().map_err(store_error)?;
-            if summary.status != PredictionStatus::Succeeded {
-                return Err(McpError::invalid_params(
-                    format!(
-                        "the run is {}, and only a succeeded run has a result",
-                        summary.status
-                    ),
-                    None,
-                ));
-            }
-            json_read(
-                uri,
-                &GenerationResult {
-                    format: GENERATION_FORMAT.into(),
-                    task_id: summary.task_id,
-                    result_uri: MediaResource::Result(prediction),
-                    artifacts: found.outputs().to_vec(),
-                    prediction: summary,
-                },
-            )?
-        }
-    };
-    Ok(DomainRead::no_store(result))
+async fn read_models(
+    domain: MediaMcp,
+    read: ReadCollection<ReadModels>,
+    context: RequestContext<RoleServer>,
+) -> Result<Page<ModelCatalog>, McpError> {
+    hub_identity(&context)?;
+    domain
+        .app
+        .catalog
+        .snapshot()
+        .map_err(catalog_error)?
+        .page(read.selection())
+        .map_err(catalog_error)
 }
-
-fn entry(found: &Prediction) -> Result<PredictionEntry, McpError> {
+async fn read_model(
+    domain: MediaMcp,
+    read: ReadModel,
+    context: RequestContext<RoleServer>,
+) -> Result<ModelSchema, McpError> {
+    hub_identity(&context)?;
+    domain
+        .app
+        .catalog
+        .snapshot()
+        .map_err(catalog_error)?
+        .schema(&read.model)
+        .map_err(catalog_error)
+}
+async fn read_predictions(
+    domain: MediaMcp,
+    read: ReadCollection<ReadPredictions>,
+    context: RequestContext<RoleServer>,
+) -> Result<Page<PredictionCollection>, McpError> {
+    let owner = identity::task_owner(&hub_identity(&context)?)?;
+    domain
+        .app
+        .predictions
+        .page(&owner, read.selection())
+        .await
+        .map_err(prediction_error)
+}
+async fn read_prediction(
+    domain: MediaMcp,
+    read: ReadPrediction,
+    context: RequestContext<RoleServer>,
+) -> Result<PredictionView, McpError> {
+    let owner = identity::task_owner(&hub_identity(&context)?)?;
+    let found = domain
+        .app
+        .predictions
+        .prediction(&owner, &read.prediction)
+        .await
+        .map_err(prediction_error)?
+        .ok_or_else(missing)?;
     let prediction = found.summary().map_err(store_error)?;
-    Ok(PredictionEntry {
-        prediction_uri: prediction
-            .prediction_id
-            .clone()
-            .map(MediaResource::Prediction),
+    let result_uri = (prediction.status == PredictionStatus::Succeeded)
+        .then_some(crate::contract::MediaResource::Result(read.prediction));
+    Ok(PredictionView {
+        prediction,
+        result_uri,
+    })
+}
+async fn read_result(
+    domain: MediaMcp,
+    read: ReadResult,
+    context: RequestContext<RoleServer>,
+) -> Result<GenerationResult, McpError> {
+    let owner = identity::task_owner(&hub_identity(&context)?)?;
+    let found = domain
+        .app
+        .predictions
+        .prediction(&owner, &read.prediction)
+        .await
+        .map_err(prediction_error)?
+        .ok_or_else(missing)?;
+    let prediction = found.summary().map_err(store_error)?;
+    if prediction.status != PredictionStatus::Succeeded {
+        return Err(McpError::invalid_params(
+            format!(
+                "the run is {}, and only a succeeded run has a result",
+                prediction.status
+            ),
+            None,
+        ));
+    }
+    Ok(GenerationResult {
+        format: GENERATION_FORMAT.into(),
+        task_id: prediction.task_id,
+        artifacts: found.outputs().to_vec(),
         prediction,
     })
+}
+fn missing() -> McpError {
+    McpError::invalid_params("no such prediction", None)
 }

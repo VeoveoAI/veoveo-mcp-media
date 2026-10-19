@@ -8,15 +8,10 @@ use veoveo_types::{
     ResourceFieldCodec, ResourceRouteError, ResourceTailCodec, ResourceUriError, Vocabulary,
 };
 
-use super::{ListCursor, MediaModelId, MediaPredictionId};
+use super::{MediaModelId, MediaPredictionId};
 
 /// The most bytes a catalog filter holds.
 pub const MAX_FILTER_BYTES: usize = 128;
-/// The most models one catalog page holds.
-pub const MAX_MODELS_PER_PAGE: u32 = 100;
-/// The models a catalog page holds when the request names no limit.
-pub const DEFAULT_MODELS_PER_PAGE: u32 = 20;
-
 /// A resource address that failed admission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaResourceError {
@@ -24,7 +19,6 @@ pub enum MediaResourceError {
     UnknownResource,
     InvalidId,
     InvalidFilter,
-    InvalidCursor,
 }
 
 impl fmt::Display for MediaResourceError {
@@ -34,7 +28,6 @@ impl fmt::Display for MediaResourceError {
             Self::UnknownResource => f.write_str("unknown or noncanonical Media resource address"),
             Self::InvalidId => f.write_str("invalid Media model or prediction identity"),
             Self::InvalidFilter => f.write_str("invalid Media listing filter"),
-            Self::InvalidCursor => f.write_str("invalid Media listing cursor"),
         }
     }
 }
@@ -105,57 +98,6 @@ impl schemars::JsonSchema for CatalogFilter {
     }
 }
 
-/// How many models a catalog page holds: 1 to 100.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "u32", into = "u32")]
-pub struct CatalogLimit(u32);
-
-impl CatalogLimit {
-    pub fn new(value: u32) -> Result<Self, MediaResourceError> {
-        (1..=MAX_MODELS_PER_PAGE)
-            .contains(&value)
-            .then_some(Self(value))
-            .ok_or(MediaResourceError::InvalidFilter)
-    }
-
-    pub fn get(self) -> u32 {
-        self.0
-    }
-}
-
-impl Default for CatalogLimit {
-    fn default() -> Self {
-        Self(DEFAULT_MODELS_PER_PAGE)
-    }
-}
-
-impl TryFrom<u32> for CatalogLimit {
-    type Error = MediaResourceError;
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        Self::new(value)
-    }
-}
-
-impl From<CatalogLimit> for u32 {
-    fn from(value: CatalogLimit) -> Self {
-        value.0
-    }
-}
-
-impl schemars::JsonSchema for CatalogLimit {
-    fn schema_name() -> Cow<'static, str> {
-        "CatalogLimit".into()
-    }
-    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({
-            "type": "integer",
-            "minimum": 1,
-            "maximum": MAX_MODELS_PER_PAGE,
-            "description": "How many models the page holds; 20 by default."
-        })
-    }
-}
-
 /// A document the server embeds and serves under `media://docs/{doc_id}`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Vocabulary)]
 pub enum MediaDocument {
@@ -176,7 +118,7 @@ pub enum MediaResource {
     #[resource(template = "media://contract")]
     Contract,
     #[resource(
-        template = "media://models{?query,type,limit,cursor}",
+        template = "media://models{?query,type}",
         route_error = listing_route_error
     )]
     Models {
@@ -184,18 +126,11 @@ pub enum MediaResource {
         query: Option<CatalogFilter>,
         #[resource(variable = "type", codec = MediaFieldCodec)]
         model_type: Option<CatalogFilter>,
-        #[resource(codec = MediaFieldCodec)]
-        limit: Option<CatalogLimit>,
-        #[resource(codec = MediaFieldCodec)]
-        cursor: Option<ListCursor>,
     },
     #[resource(template = "media://model/{+model_id}")]
     Model(#[resource(variable = "model_id", tail, codec = ModelTailCodec)] MediaModelId),
-    #[resource(template = "media://predictions{?cursor}", route_error = listing_route_error)]
-    Predictions {
-        #[resource(codec = MediaFieldCodec)]
-        cursor: Option<ListCursor>,
-    },
+    #[resource(template = "media://predictions")]
+    Predictions,
     #[resource(template = "media://prediction/{prediction_id}")]
     Prediction(#[resource(variable = "prediction_id", codec = MediaFieldCodec)] MediaPredictionId),
     #[resource(template = "media://prediction/{prediction_id}/result")]
@@ -208,14 +143,12 @@ impl MediaResource {
         Self::Models {
             query: None,
             model_type: None,
-            limit: None,
-            cursor: None,
         }
     }
 
     /// The first page of the caller's predictions.
     pub fn predictions() -> Self {
-        Self::Predictions { cursor: None }
+        Self::Predictions
     }
 
     /// Predictions change as their generations progress, so the prediction listing's
@@ -223,7 +156,7 @@ impl MediaResource {
     /// finished results do not change.
     pub fn is_subscribable(&self) -> bool {
         match self {
-            Self::Predictions { cursor } => cursor.is_none(),
+            Self::Predictions => true,
             Self::Prediction(_) => true,
             Self::Docs
             | Self::Document(_)
@@ -273,32 +206,6 @@ impl ResourceFieldCodec<CatalogFilter> for MediaFieldCodec {
             .ok_or(MediaResourceError::InvalidFilter)
     }
     fn text(value: &CatalogFilter) -> Cow<'_, str> {
-        value.as_str().into()
-    }
-}
-
-impl ResourceFieldCodec<CatalogLimit> for MediaFieldCodec {
-    type Error = MediaResourceError;
-    fn parse(value: &str) -> Result<CatalogLimit, Self::Error> {
-        let parsed: u32 = value
-            .parse()
-            .map_err(|_| MediaResourceError::InvalidFilter)?;
-        let limit = CatalogLimit::new(parsed)?;
-        (limit.get().to_string() == value)
-            .then_some(limit)
-            .ok_or(MediaResourceError::InvalidFilter)
-    }
-    fn text(value: &CatalogLimit) -> Cow<'_, str> {
-        value.get().to_string().into()
-    }
-}
-
-impl ResourceFieldCodec<ListCursor> for MediaFieldCodec {
-    type Error = MediaResourceError;
-    fn parse(value: &str) -> Result<ListCursor, Self::Error> {
-        ListCursor::parse(value).map_err(|_| MediaResourceError::InvalidCursor)
-    }
-    fn text(value: &ListCursor) -> Cow<'_, str> {
         value.as_str().into()
     }
 }
@@ -355,11 +262,10 @@ mod tests {
             "media://docs/agents",
             "media://contract",
             "media://models",
-            "media://models?query=flux&type=text-to-image&limit=5&cursor=abc_-1",
+            "media://models?query=flux&type=text-to-image",
             "media://model/owner/model",
             "media://model/a.b/c-d/e_f",
             "media://predictions",
-            "media://predictions?cursor=abc",
             "media://prediction/pred-1",
             "media://prediction/pred-1/result",
         ] {
@@ -414,6 +320,55 @@ mod tests {
     }
 
     #[test]
+    fn shared_collection_selection_round_trips_and_refuses_duplicate_cursors() {
+        use super::super::{ModelCatalog, ModelFilters, ReadModels};
+        use veoveo_hub_sdk::{
+            calls::ResourceRead,
+            definition::{CollectionRequest, CollectionResource, ReadCollection},
+        };
+        use veoveo_types::{CursorToken, PageSize, ResourceUri};
+        let cursor: CursorToken<ModelCatalog> =
+            serde_json::from_value(serde_json::json!("opaque+query&value")).unwrap();
+        let read = ReadCollection::new(
+            ReadModels {
+                filters: ModelFilters {
+                    query: CatalogFilter::parse("flux").unwrap(),
+                    model_type: None,
+                },
+            },
+            PageSize::new(5).unwrap(),
+        )
+        .continuing(cursor);
+        let uri = read.uri().unwrap();
+        let (base, limit, cursor) =
+            CollectionRequest::<ModelCatalog>::split_uri(&uri, ReadModels::default_limit())
+                .unwrap();
+        assert_eq!(limit, PageSize::new(5).unwrap());
+        assert_eq!(cursor.unwrap().as_str(), "opaque+query&value");
+        let address = MediaResource::parse(base.as_str()).unwrap();
+        assert_eq!(
+            ReadModels::from_address(&address)
+                .unwrap()
+                .filters
+                .query
+                .unwrap()
+                .as_str(),
+            "flux"
+        );
+        let invalid = ResourceUri::new("media://models?cursor=a&cursor=b").unwrap();
+        assert!(
+            CollectionRequest::<ModelCatalog>::split_uri(&invalid, ReadModels::default_limit())
+                .is_err()
+        );
+        assert_eq!(
+            veoveo_hub_sdk::definition::collection_template(ReadModels::TEMPLATE)
+                .unwrap()
+                .as_str(),
+            "media://models{?query,type,limit,cursor}"
+        );
+    }
+
+    #[test]
     fn only_predictions_and_their_root_accept_subscriptions() {
         assert!(MediaResource::predictions().is_subscribable());
         assert!(
@@ -421,11 +376,5 @@ mod tests {
         );
         assert!(!MediaResource::models().is_subscribable());
         assert!(!MediaResource::Result(MediaPredictionId::parse("p").unwrap()).is_subscribable());
-        assert!(
-            !MediaResource::Predictions {
-                cursor: Some(ListCursor::parse("abc").unwrap())
-            }
-            .is_subscribable()
-        );
     }
 }

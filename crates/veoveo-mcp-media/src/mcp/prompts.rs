@@ -55,10 +55,6 @@ impl MediaPrompt {
         Self::TaskReview,
     ];
 
-    pub fn by_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|prompt| prompt.name() == name)
-    }
-
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::ModelSelect => "media-model-select",
@@ -207,7 +203,6 @@ mod tests {
     #[test]
     fn prompts_render_with_their_required_arguments() {
         for prompt in MediaPrompt::ALL {
-            assert_eq!(MediaPrompt::by_name(prompt.name()), Some(prompt));
             assert!(
                 prompt.render(None).is_err(),
                 "{} needs arguments",

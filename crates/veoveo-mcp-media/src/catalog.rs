@@ -9,17 +9,14 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
-use veoveo_store::CursorScope;
+use veoveo_hub_sdk::definition::CollectionRequest;
+use veoveo_types::{Page, Pager, PagingError, RevisionBound, Sha256Digest};
 
 use crate::{
-    contract::{
-        CatalogFilter, CatalogLimit, ListCursor, MediaModelId, ModelCatalogPage, ModelSchema,
-        ModelsRequest,
-    },
+    contract::{MediaModelId, ModelCatalog, ModelSchema},
     provider::{ProviderClient, ProviderError, wire::ModelEntry},
 };
 
@@ -41,10 +38,19 @@ pub enum CatalogError {
         "the cursor belongs to another catalog page, filter or registry; start from the first page"
     )]
     StaleCursor,
+    #[error(transparent)]
+    Paging(#[from] PagingError),
     #[error("no model `{0}` is in the catalog")]
     UnknownModel(MediaModelId),
     #[error(transparent)]
     Provider(#[from] ProviderError),
+}
+
+fn paging_error(error: PagingError) -> CatalogError {
+    match error {
+        PagingError::Cursor(_) => CatalogError::StaleCursor,
+        other => CatalogError::Paging(other),
+    }
 }
 
 /// Why a run's input was refused.
@@ -63,17 +69,8 @@ pub enum InputError {
 pub struct Snapshot {
     models: Vec<ModelEntry>,
     index: BTreeMap<MediaModelId, usize>,
-    digest: String,
+    digest: Sha256Digest,
     pub fetched_at: DateTime<Utc>,
-}
-
-/// The filters and registry a cursor is bound to.
-#[derive(Serialize)]
-struct PageScope<'a> {
-    query: Option<&'a str>,
-    model_type: Option<&'a str>,
-    limit: u32,
-    registry: &'a str,
 }
 
 impl Snapshot {
@@ -94,7 +91,7 @@ impl Snapshot {
         models.sort_by(|a, b| a.model_id.cmp(&b.model_id));
         let bytes = serde_json::to_vec(&models)
             .map_err(|_| CatalogError::InvalidRegistry("the registry does not serialize"))?;
-        let digest = hex::encode(Sha256::digest(bytes));
+        let digest = Sha256Digest::from_bytes(Sha256::digest(bytes).into());
         let index = models
             .iter()
             .enumerate()
@@ -109,7 +106,7 @@ impl Snapshot {
     }
 
     /// The registry's SHA-256, which binds the catalog's cursors.
-    pub fn digest(&self) -> &str {
+    pub fn digest(&self) -> &Sha256Digest {
         &self.digest
     }
 
@@ -139,89 +136,42 @@ impl Snapshot {
             .ok_or_else(|| CatalogError::UnknownModel(model.clone()))
     }
 
-    fn scope(
+    /// One revision-bound page in model identity order. The global registry has no
+    /// caller-owned rows; current route authorization is evaluated before this call.
+    pub fn page(
         &self,
-        query: Option<&CatalogFilter>,
-        model_type: Option<&CatalogFilter>,
-        limit: CatalogLimit,
-    ) -> Result<CursorScope, CatalogError> {
-        CursorScope::new(
-            "media.models",
+        request: &CollectionRequest<ModelCatalog>,
+    ) -> Result<Page<ModelCatalog>, CatalogError> {
+        let pager = Pager::<ModelCatalog>::new(
             "catalog",
-            &PageScope {
-                query: query.map(CatalogFilter::as_str),
-                model_type: model_type.map(CatalogFilter::as_str),
-                limit: limit.get(),
-                registry: &self.digest,
-            },
+            request.filters().clone(),
+            request.limit(),
+            RevisionBound::new(self.digest.clone()),
+            request.cursor(),
         )
-        .map_err(|_| CatalogError::StaleCursor)
-    }
-
-    /// One page of models matching the request's filters, after the request's cursor.
-    pub fn page(&self, request: &ModelsRequest) -> Result<ModelCatalogPage, CatalogError> {
-        let limit = request.limit.unwrap_or_default();
-        let scope = self.scope(request.query.as_ref(), request.model_type.as_ref(), limit)?;
-        let after: Option<MediaModelId> = request
-            .cursor
-            .as_ref()
-            .map(|cursor| {
-                scope
-                    .parse::<MediaModelId>(cursor.as_str())
-                    .map(|cursor| cursor.position().clone())
-                    .map_err(|_| CatalogError::StaleCursor)
-            })
-            .transpose()?;
-        let matches = |model: &&ModelEntry| {
-            request
-                .model_type
-                .as_ref()
-                .is_none_or(|wanted| model.model_type.eq_ignore_ascii_case(wanted.as_str()))
-                && request.query.as_ref().is_none_or(|query| {
-                    [
-                        model.model_id.as_str(),
-                        &model.name,
-                        &model.model_type,
-                        &model.description,
-                    ]
-                    .iter()
-                    .any(|text| text.to_ascii_lowercase().contains(query.as_str()))
-                })
-        };
-        let matching: Vec<&ModelEntry> = self.models.iter().filter(matches).collect();
-        if let Some(after) = &after
-            && !matching.iter().any(|model| &model.model_id == after)
-        {
-            return Err(CatalogError::StaleCursor);
-        }
-        let mut remaining = matching
+        .map_err(paging_error)?;
+        let filters = request.filters();
+        let matching = self
+            .models
             .iter()
-            .filter(|model| after.as_ref().is_none_or(|after| &model.model_id > after));
-        let models: Vec<_> = remaining
-            .by_ref()
-            .take(limit.get() as usize)
-            .map(|model| model.catalog_item())
-            .collect();
-        let next_cursor = match (remaining.next(), models.last()) {
-            (Some(_), Some(last)) => Some(
-                ListCursor::parse(
-                    scope
-                        .cursor(last.model_id.clone())
-                        .map_err(|_| CatalogError::StaleCursor)?
-                        .as_str(),
-                )
-                .map_err(|_| CatalogError::StaleCursor)?,
-            ),
-            _ => None,
-        };
-        Ok(ModelCatalogPage {
-            query: request.query.clone(),
-            model_type: request.model_type.clone(),
-            total_available: matching.len() as u64,
-            limit,
-            models,
-            next_cursor,
-        })
+            .filter(|model| {
+                filters
+                    .model_type
+                    .as_ref()
+                    .is_none_or(|wanted| model.model_type.eq_ignore_ascii_case(wanted.as_str()))
+                    && filters.query.as_ref().is_none_or(|query| {
+                        [
+                            model.model_id.as_str(),
+                            &model.name,
+                            &model.model_type,
+                            &model.description,
+                        ]
+                        .iter()
+                        .any(|text| text.to_ascii_lowercase().contains(query.as_str()))
+                    })
+            })
+            .map(ModelEntry::catalog_item);
+        pager.select(matching).map_err(paging_error)
     }
 
     /// The model, once `input` satisfies its published input schema. A model that
@@ -322,7 +272,9 @@ impl Catalog {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contract::{CatalogFilter, ModelFilters};
     use serde_json::json;
+    use veoveo_types::{CursorToken, PageSize};
 
     fn entry(id: &str, model_type: &str, schema: Option<Value>) -> ModelEntry {
         ModelEntry {
@@ -360,12 +312,21 @@ mod tests {
         .unwrap()
     }
 
-    fn request(model_type: Option<&str>, limit: u32, cursor: Option<ListCursor>) -> ModelsRequest {
-        ModelsRequest {
-            query: None,
-            model_type: model_type.map(|t| CatalogFilter::parse(t).unwrap().unwrap()),
-            limit: Some(CatalogLimit::new(limit).unwrap()),
-            cursor,
+    fn request(
+        model_type: Option<&str>,
+        limit: u32,
+        cursor: Option<CursorToken<ModelCatalog>>,
+    ) -> CollectionRequest<ModelCatalog> {
+        let request = CollectionRequest::new(
+            ModelFilters {
+                query: None,
+                model_type: model_type.map(|t| CatalogFilter::parse(t).unwrap().unwrap()),
+            },
+            PageSize::new(limit).unwrap(),
+        );
+        match cursor {
+            Some(cursor) => request.continuing(cursor),
+            None => request,
         }
     }
 
@@ -373,15 +334,14 @@ mod tests {
     fn pages_follow_model_order_and_end_without_a_cursor() {
         let snapshot = snapshot();
         let first = snapshot.page(&request(None, 3, None)).unwrap();
-        assert_eq!(first.total_available, 4);
-        let ids: Vec<_> = first.models.iter().map(|m| m.model_id.as_str()).collect();
+        let ids: Vec<_> = first.items().iter().map(|m| m.model_id.as_str()).collect();
         assert_eq!(ids, ["a/video", "b/image", "c/image"]);
         let second = snapshot
-            .page(&request(None, 3, first.next_cursor.clone()))
+            .page(&request(None, 3, first.next_cursor().cloned()))
             .unwrap();
-        assert_eq!(second.models.len(), 1);
-        assert_eq!(second.models[0].model_id.as_str(), "d/edit");
-        assert_eq!(second.next_cursor, None);
+        assert_eq!(second.items().len(), 1);
+        assert_eq!(second.items()[0].model_id.as_str(), "d/edit");
+        assert_eq!(second.next_cursor(), None);
     }
 
     #[test]
@@ -390,21 +350,24 @@ mod tests {
         let images = snapshot
             .page(&request(Some("TEXT-to-image"), 10, None))
             .unwrap();
-        assert_eq!(images.total_available, 2);
-        let query = ModelsRequest {
-            query: CatalogFilter::parse("EDIT").unwrap(),
-            ..ModelsRequest::default()
-        };
+        assert_eq!(images.items().len(), 2);
+        let query = CollectionRequest::new(
+            ModelFilters {
+                query: CatalogFilter::parse("EDIT").unwrap(),
+                ..ModelFilters::default()
+            },
+            PageSize::new(20).unwrap(),
+        );
         let edits = snapshot.page(&query).unwrap();
-        assert_eq!(edits.models.len(), 1);
-        assert_eq!(edits.models[0].model_id.as_str(), "d/edit");
+        assert_eq!(edits.items().len(), 1);
+        assert_eq!(edits.items()[0].model_id.as_str(), "d/edit");
     }
 
     #[test]
     fn a_cursor_pages_only_its_own_filter_limit_and_registry() {
         let snapshot = snapshot();
         let first = snapshot.page(&request(None, 1, None)).unwrap();
-        let cursor = first.next_cursor.unwrap();
+        let cursor = first.next_cursor().unwrap().clone();
         assert!(matches!(
             snapshot.page(&request(None, 2, Some(cursor.clone()))),
             Err(CatalogError::StaleCursor)

@@ -19,11 +19,23 @@ records the run's cost in core's usage ledger. The design is
 ## Using The Contract
 
 A consumer depends on the crate with `default-features = false, features = ["contract"]`
-by Git revision. `MediaProvider` names the server, and `ModelsRequest`,
-`ModelSchemaRequest` and `RunRequest` are `ToolCall`s with typed results, so a server
-that declares uses of Media's permissions calls Media through the Hub with the SDK's
-`HubClient`; `run` is a `TaskToolCall` whose handle resolves with the
-`GenerationResult`.
+by Git revision. `MediaProvider` names the server. The catalog call is
+`List<ModelsTool>` returning `Page<ModelCatalog>`; `ModelSchemaRequest` returns one
+`ModelSchema`. `RunRequest` is a `TaskToolCall` whose handle resolves with
+`Product<GenerationResult>`. A consumer declares native permission names through
+its ready route builder's `uses` and calls through the SDK's `HubClient`.
+
+```rust
+let request = veoveo_hub_sdk::definition::List::<ModelsTool>::new(
+    ModelFilters::default(), veoveo_types::PageSize::new(20)?,
+);
+let page = client.call(request).await?;
+for model in page.items() { /* choose a model */ }
+```
+
+For another page, return `page.next_cursor()` through `List::continuing` with the
+same filters and limit. `ReadCollection<ReadModels>` uses the identical collection
+contract over resource URIs.
 
 ## Database
 

@@ -10,8 +10,6 @@ use serde::{Deserialize, Serialize};
 pub const MAX_MODEL_ID_BYTES: usize = 512;
 /// The most bytes a prediction identity holds.
 pub const MAX_PREDICTION_ID_BYTES: usize = 512;
-/// The most bytes a listing cursor holds on the wire.
-pub const MAX_CURSOR_BYTES: usize = 4096;
 
 /// A value that failed admission as one of Media's identities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -22,8 +20,6 @@ pub enum MediaIdError {
     Model,
     #[error("a prediction is 1 to 512 bytes without `/` or control characters")]
     Prediction,
-    #[error("a cursor is 1 to 4096 base64url characters from the previous page")]
-    Cursor,
 }
 
 /// A provider model, such as `owner/model/variant`: up to 512 ASCII bytes of non-empty
@@ -166,63 +162,6 @@ impl JsonSchema for MediaPredictionId {
     }
 }
 
-/// An opaque listing cursor as it travels in an address or a request: 1 to 4096
-/// base64url characters. The server admits it against the listing, tenant, filters and,
-/// for models, the catalog snapshot that issued it; this type checks only its spelling.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct ListCursor(String);
-
-impl ListCursor {
-    pub fn parse(value: impl Into<String>) -> Result<Self, MediaIdError> {
-        let value = value.into();
-        let spelled = !value.is_empty()
-            && value.len() <= MAX_CURSOR_BYTES
-            && value
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'));
-        spelled.then_some(Self(value)).ok_or(MediaIdError::Cursor)
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl TryFrom<String> for ListCursor {
-    type Error = MediaIdError;
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::parse(value)
-    }
-}
-
-impl From<ListCursor> for String {
-    fn from(value: ListCursor) -> Self {
-        value.0
-    }
-}
-
-impl fmt::Display for ListCursor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl JsonSchema for ListCursor {
-    fn schema_name() -> Cow<'static, str> {
-        "ListCursor".into()
-    }
-    fn json_schema(_: &mut SchemaGenerator) -> Schema {
-        json_schema!({
-            "type": "string",
-            "minLength": 1,
-            "maxLength": MAX_CURSOR_BYTES,
-            "pattern": "^[A-Za-z0-9_-]+$",
-            "description": "An opaque cursor from the previous page of the same listing."
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,14 +215,6 @@ mod tests {
                 Err(MediaIdError::Prediction),
                 "{prediction:?}"
             );
-        }
-    }
-
-    #[test]
-    fn cursors_check_their_spelling_only() {
-        assert!(ListCursor::parse("eyJh-_0").is_ok());
-        for cursor in ["", "a=b", "a+b", "a b"] {
-            assert_eq!(ListCursor::parse(cursor), Err(MediaIdError::Cursor));
         }
     }
 }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use veoveo_types::{ResourceUri, TaskId, Vocabulary};
 
-use super::{ListCursor, MediaModelId, MediaPredictionId, MediaResource};
+use super::{MediaModelId, MediaPredictionId, MediaResource};
 
 /// The format of a generation result.
 pub const GENERATION_FORMAT: &str = "https://veoveo.ai/formats/media-generation";
@@ -17,6 +17,7 @@ pub const GENERATION_COMPLETED: &str = "Generation completed.";
 /// The arguments of `run`, which runs as a Task.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[veoveo_hub_sdk::tool(provider = super::MediaProvider, output = veoveo_hub_sdk::definition::Product<GenerationResult>, name = "run", task = true)]
 pub struct RunRequest {
     /// The model to run. Browse `media://models` or complete the model template.
     pub model: MediaModelId,
@@ -137,13 +138,12 @@ pub struct GeneratedArtifact {
 /// What a finished run returns: the prediction, its result address and its outputs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(veoveo_hub_sdk::SingleOutput)]
 pub struct GenerationResult {
     /// `https://veoveo.ai/formats/media-generation`.
     pub format: String,
     #[schemars(with = "String")]
     pub task_id: TaskId,
-    /// `media://prediction/{prediction_id}/result`, where this result stays readable.
-    pub result_uri: MediaResource,
     pub prediction: PredictionSummary,
     pub artifacts: Vec<GeneratedArtifact>,
 }
@@ -158,18 +158,10 @@ pub struct PredictionEntry {
     pub prediction: PredictionSummary,
 }
 
-/// A page of the caller's predictions, newest first.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PredictionListing {
-    pub predictions: Vec<PredictionEntry>,
-    /// The cursor of the next page, or `null` on the last page.
-    pub next_cursor: Option<ListCursor>,
-}
-
 /// One prediction and, once it succeeded, its result's address.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(veoveo_hub_sdk::SingleOutput)]
 pub struct PredictionView {
     pub prediction: PredictionSummary,
     #[serde(default, skip_serializing_if = "Option::is_none")]

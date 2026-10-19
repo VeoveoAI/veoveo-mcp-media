@@ -22,20 +22,24 @@ use support::{
 use veoveo_hub_sdk::{
     AccessTokenSubject, ForwardedRequest, HubInternalTokenIssuer, HubProfileId, HubRequestContext,
     OAuthClientId, ProtectedResourceId, TokenIssuer,
+    definition::{CollectionRequest, NoFilters},
     durable_tasks::DurableTaskService,
     hosting::testing::{self, MESH_PROFILE},
     registration::ResourceIndicator,
 };
 use veoveo_mcp_artifact::contract::ArtifactPermission;
 use veoveo_mcp_media::{
-    contract::{GenerationResult, MediaPermission, MediaPredictionId, PredictionStatus},
+    contract::{
+        GenerationResult, MediaPermission, MediaPredictionId, PredictionCollection,
+        PredictionStatus,
+    },
     fake::{FAILING_MODEL, IMAGE_BYTES, IMAGE_MODEL, LARGE_BYTES, LARGE_MODEL, output_byte},
     mcp::identity,
     predictions::Prediction,
     provider::generation_key,
 };
 use veoveo_task::{OperationState, TaskStatus};
-use veoveo_types::{InvocationMode, TaskId};
+use veoveo_types::{InvocationMode, PageSize, TaskId};
 
 fn prompt() -> Value {
     json!({"prompt": "a lighthouse at dusk"})
@@ -72,7 +76,8 @@ async fn a_run_stores_its_output_in_artifact_and_records_its_cost() {
         let completed = harness
             .until(&task, |view| view["status"] == "completed")
             .await;
-        let result = &completed["result"]["structuredContent"];
+        let product = &completed["result"]["structuredContent"];
+        let result = &product["metadata"];
         assert_eq!(
             result["format"],
             "https://veoveo.ai/formats/media-generation"
@@ -81,13 +86,17 @@ async fn a_run_stores_its_output_in_artifact_and_records_its_cost() {
         assert_eq!(result["prediction"]["completion"], "events");
         let prediction = result["prediction"]["predictionId"].as_str().unwrap();
         assert_eq!(
-            result["resultUri"],
+            product["resultUri"],
             format!("media://prediction/{prediction}/result")
         );
         assert_eq!(
-            completed["result"]["content"][0]["text"], "Generation completed.",
-            "{completed}"
+            completed["result"]["content"][0]["uri"],
+            product["resultUri"]
         );
+        let text: Value =
+            serde_json::from_str(completed["result"]["content"][1]["text"].as_str().unwrap())
+                .unwrap();
+        assert_eq!(&text, product);
         let artifacts = result["artifacts"].as_array().unwrap();
         assert_eq!(artifacts.len(), 1, "{result}");
         assert_eq!(artifacts[0]["mediaType"], "image/png");
@@ -115,14 +124,27 @@ async fn a_run_stores_its_output_in_artifact_and_records_its_cost() {
             status_of(&harness, &task).await,
             PredictionStatus::Succeeded
         );
-        let page = harness.predictions().page(&owner(), None).await.unwrap();
-        assert_eq!(page.items.len(), 1);
-        assert_eq!(page.items[0].outputs().len(), 1);
-        assert_eq!(page.items[0].status(), PredictionStatus::Succeeded);
+        let page = harness
+            .predictions()
+            .page(
+                &owner(),
+                &CollectionRequest::<PredictionCollection>::new(
+                    NoFilters {},
+                    PageSize::new(100).unwrap(),
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.items().len(), 1);
+        assert_eq!(page.items()[0].prediction.output_count as usize, 1);
+        assert_eq!(
+            page.items()[0].prediction.status,
+            PredictionStatus::Succeeded
+        );
         // A result snapshot is stamped before the Task transition commits. The prediction
         // projects core's lifecycle timestamp; every other summary field must agree.
         let generated: GenerationResult = serde_json::from_value(result.clone()).unwrap();
-        let persisted = page.items[0].summary().unwrap();
+        let persisted = page.items()[0].prediction.clone();
         assert!(generated.prediction.completed_at.is_some());
         assert!(persisted.completed_at.is_some());
         let mut snapshot = generated.prediction;
@@ -236,7 +258,7 @@ async fn a_run_parked_across_a_restart_resumes_on_another_worker_without_resubmi
             .until(&task, |view| view["status"] == "completed")
             .await;
         assert_eq!(
-            completed["result"]["structuredContent"]["artifacts"]
+            completed["result"]["structuredContent"]["metadata"]["artifacts"]
                 .as_array()
                 .unwrap()
                 .len(),
@@ -403,7 +425,7 @@ async fn a_large_output_streams_into_artifact_in_parts_and_is_verified() {
         let completed = harness
             .until(&task, |view| view["status"] == "completed")
             .await;
-        let artifacts = completed["result"]["structuredContent"]["artifacts"]
+        let artifacts = completed["result"]["structuredContent"]["metadata"]["artifacts"]
             .as_array()
             .unwrap()
             .clone();
@@ -503,9 +525,16 @@ async fn a_caller_without_the_run_permission_starts_nothing() {
         assert!(answer["error"].is_object(), "{answer}");
         assert_eq!(harness.fake().submissions(), 0);
         // The catalog stays readable.
-        let models = harness.mesh.call("media", "models", json!({})).await;
+        let models = harness
+            .mesh
+            .call("media", "models", json!({"filters":{}}))
+            .await;
         assert_eq!(
-            models["result"]["structuredContent"]["totalAvailable"], 3,
+            models["result"]["structuredContent"]["items"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3,
             "{models}"
         );
     })
@@ -565,7 +594,7 @@ async fn a_run_without_a_callback_completes_through_status_checks() {
         let completed = harness
             .until(&task, |view| view["status"] == "completed")
             .await;
-        let artifacts = completed["result"]["structuredContent"]["artifacts"]
+        let artifacts = completed["result"]["structuredContent"]["metadata"]["artifacts"]
             .as_array()
             .unwrap()
             .clone();
@@ -581,7 +610,7 @@ async fn a_run_without_a_callback_completes_through_status_checks() {
         assert_eq!(usage[0]["phase"], "actual");
         assert_eq!(harness.fake().submissions(), 1);
         assert_eq!(
-            completed["result"]["structuredContent"]["prediction"]["completion"],
+            completed["result"]["structuredContent"]["metadata"]["prediction"]["completion"],
             "checks"
         );
         assert_eq!(
@@ -605,7 +634,7 @@ async fn a_run_without_a_callback_finishes_on_its_own_when_the_provider_does() {
             .until(&task, |view| view["status"] == "completed")
             .await;
         assert_eq!(
-            completed["result"]["structuredContent"]["artifacts"]
+            completed["result"]["structuredContent"]["metadata"]["artifacts"]
                 .as_array()
                 .unwrap()
                 .len(),
@@ -620,7 +649,7 @@ async fn a_restarted_fake_provider_repeats_no_identity_the_database_holds() {
     within(async {
         let mut harness = harness(true).await;
         let prediction_of = |view: &Value| {
-            view["result"]["structuredContent"]["prediction"]["predictionId"]
+            view["result"]["structuredContent"]["metadata"]["prediction"]["predictionId"]
                 .as_str()
                 .unwrap()
                 .to_owned()
@@ -683,7 +712,7 @@ async fn a_provider_that_repeats_a_prediction_fails_the_second_run_as_its_task_e
             .until(&first, |view| view["status"] == "completed")
             .await;
         let held = MediaPredictionId::parse(
-            completed["result"]["structuredContent"]["prediction"]["predictionId"]
+            completed["result"]["structuredContent"]["metadata"]["prediction"]["predictionId"]
                 .as_str()
                 .unwrap(),
         )
@@ -744,9 +773,19 @@ async fn a_run_whose_outputs_the_database_refuses_reads_as_its_task_ended() {
         assert_eq!(summary.status, PredictionStatus::Failed);
         assert_eq!(summary.error, Some(failure.message.clone()));
         assert_eq!(summary.completed_at, stored.completed_at);
-        let page = harness.predictions().page(&owner(), None).await.unwrap();
-        assert_eq!(page.items.len(), 1);
-        assert_eq!(page.items[0].status(), PredictionStatus::Failed);
+        let page = harness
+            .predictions()
+            .page(
+                &owner(),
+                &CollectionRequest::<PredictionCollection>::new(
+                    NoFilters {},
+                    PageSize::new(100).unwrap(),
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.items().len(), 1);
+        assert_eq!(page.items()[0].prediction.status, PredictionStatus::Failed);
     })
     .await;
 }
@@ -782,18 +821,89 @@ async fn the_listing_shows_the_newest_run_first_as_its_task_stands() {
         // The second run waits for a worker, so the listing shows it queued.
         harness.stop_worker().await;
         let second = harness.run(IMAGE_MODEL, prompt()).await;
-        let page = harness.predictions().page(&owner(), None).await.unwrap();
+        let selection =
+            CollectionRequest::<PredictionCollection>::new(NoFilters {}, PageSize::new(1).unwrap());
+        let page = harness
+            .predictions()
+            .page(&owner(), &selection)
+            .await
+            .unwrap();
+        assert_eq!(page.items().len(), 1);
+        assert_eq!(page.items()[0].prediction.task_id.to_string(), second);
+        assert_eq!(page.items()[0].prediction.status, PredictionStatus::Queued);
+        let cursor = page.next_cursor().unwrap().clone();
+        let next = harness
+            .predictions()
+            .page(&owner(), &selection.continuing(cursor.clone()))
+            .await
+            .unwrap();
+        assert_eq!(next.items().len(), 1);
+        assert_eq!(next.items()[0].prediction.task_id.to_string(), first);
         assert_eq!(
-            page.items
-                .iter()
-                .map(|item| (item.task.task_id.to_string(), item.status()))
-                .collect::<Vec<_>>(),
-            vec![
-                (second.clone(), PredictionStatus::Queued),
-                (first, PredictionStatus::Succeeded),
-            ]
+            next.items()[0].prediction.status,
+            PredictionStatus::Succeeded
         );
-        assert!(page.next.is_none());
+        assert!(next.next_cursor().is_none());
+
+        let changed_limit =
+            CollectionRequest::<PredictionCollection>::new(NoFilters {}, PageSize::new(2).unwrap())
+                .continuing(cursor.clone());
+        assert!(matches!(
+            harness.predictions().page(&owner(), &changed_limit).await,
+            Err(veoveo_mcp_media::predictions::PredictionError::StaleCursor)
+        ));
+        let mut foreign = owner();
+        foreign.surface = veoveo_task::TaskSurface::parse("another-profile").unwrap();
+        let continued =
+            CollectionRequest::<PredictionCollection>::new(NoFilters {}, PageSize::new(1).unwrap())
+                .continuing(cursor);
+        assert!(matches!(
+            harness.predictions().page(&foreign, &continued).await,
+            Err(veoveo_mcp_media::predictions::PredictionError::StaleCursor)
+        ));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn model_tool_pages_the_synthetic_registry_and_refuses_changed_selection() {
+    within(async {
+        let harness = harness(true).await;
+        let first = harness
+            .mesh
+            .call("media", "models", json!({"filters":{},"limit":2}))
+            .await;
+        let first = &first["result"]["structuredContent"];
+        assert_eq!(first["items"].as_array().unwrap().len(), 2);
+        let cursor = first["nextCursor"].as_str().unwrap();
+        let second = harness
+            .mesh
+            .call(
+                "media",
+                "models",
+                json!({"filters":{},"limit":2,"cursor":cursor}),
+            )
+            .await;
+        let second = &second["result"]["structuredContent"];
+        assert_eq!(second["items"].as_array().unwrap().len(), 1);
+        assert!(second["nextCursor"].is_null());
+        let ids: Vec<_> = first["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .chain(second["items"].as_array().unwrap())
+            .map(|item| item["modelId"].as_str().unwrap())
+            .collect();
+        assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
+        let refused = harness
+            .mesh
+            .call(
+                "media",
+                "models",
+                json!({"filters":{},"limit":1,"cursor":cursor}),
+            )
+            .await;
+        assert!(refused["error"].is_object(), "{refused}");
     })
     .await;
 }

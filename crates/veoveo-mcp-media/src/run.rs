@@ -11,13 +11,13 @@ use std::{collections::BTreeSet, io, sync::Arc, time::Duration};
 use anyhow::{Context, anyhow};
 use chrono::Utc;
 use futures::TryStreamExt as _;
-use rmcp::model::Resource;
 use serde_json::{Map, json};
 use tokio_util::sync::CancellationToken;
 use url::Url;
 use veoveo_hub_sdk::{
+    definition::Product,
     durable_tasks::{TaskContext, TaskStop, TaskWorkError, TaskWorker, mcp_task_completion},
-    hosting::product_result,
+    hosting::task_result,
     usage::{
         Amount, ChargePeriod, Currency, Money, Quantity, ServiceCategory, UsageKind,
         UsageKindDeclaration, UsageKinds, UsageUnit,
@@ -558,7 +558,6 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
     let result = GenerationResult {
         format: GENERATION_FORMAT.into(),
         task_id,
-        result_uri: MediaResource::Result(prediction.id.clone()),
         prediction: crate::contract::PredictionSummary {
             task_id,
             prediction_id: Some(prediction.id.clone()),
@@ -576,13 +575,9 @@ async fn attempt(ctx: &TaskContext, media: &MediaWork) -> anyhow::Result<TaskTra
         .store
         .record_outputs(tenant, task_id, &prediction.id, &outputs)
         .await?;
-    let result_uri = result.result_uri.to_uri()?;
-    let completion = product_result(
-        GENERATION_COMPLETED,
-        Resource::new(result_uri.as_str(), "Generation result"),
-        &result,
-    )
-    .map_err(|error| anyhow!(error.message.to_string()))?;
+    let product = Product::new(&MediaResource::Result(prediction.id.clone()), result)?;
+    let completion =
+        task_result::<RunRequest>(&product).map_err(|error| anyhow!(error.message.to_string()))?;
     Ok(mcp_task_completion(GENERATION_COMPLETED, completion)?)
 }
 

@@ -10,9 +10,9 @@ pub(crate) fn catalog_error(error: CatalogError) -> McpError {
             McpError::invalid_params(error.to_string(), None)
         }
         CatalogError::Unavailable => McpError::invalid_request(error.to_string(), None),
-        failure @ (CatalogError::InvalidRegistry(_) | CatalogError::Provider(_)) => {
-            internal(&failure)
-        }
+        failure @ (CatalogError::InvalidRegistry(_)
+        | CatalogError::Provider(_)
+        | CatalogError::Paging(_)) => internal(&failure),
     }
 }
 
@@ -30,6 +30,9 @@ pub(crate) fn prediction_error(error: PredictionError) -> McpError {
         PredictionError::StaleCursor => McpError::invalid_params(error.to_string(), None),
         PredictionError::Store(error) => store_error(error),
         PredictionError::Tasks(error) => internal(&error),
+        failure @ (PredictionError::Paging(_) | PredictionError::InvalidProfile) => {
+            internal(&failure)
+        }
     }
 }
 

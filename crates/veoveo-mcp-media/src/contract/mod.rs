@@ -4,26 +4,28 @@
 
 mod calls;
 mod catalog;
+mod collections;
 mod generation;
 mod ids;
 mod permissions;
 mod resource;
 
-pub use calls::{MediaProvider, served_tools};
-pub use catalog::{
-    ModelCatalogItem, ModelCatalogPage, ModelSchema, ModelSchemaRequest, ModelsRequest,
+pub use calls::{
+    MediaProvider, ReadModel, ReadModels, ReadPrediction, ReadPredictions, ReadResult,
 };
+pub use catalog::{
+    ModelCatalog, ModelCatalogItem, ModelFilters, ModelSchema, ModelSchemaRequest, ModelsTool,
+};
+pub use collections::{PredictionCollection, PredictionKeyset, PredictionPosition};
 pub use generation::{
     CompletionMode, GENERATION_COMPLETED, GENERATION_FORMAT, GeneratedArtifact, GenerationResult,
-    PredictionEntry, PredictionListing, PredictionStatus, PredictionSummary, PredictionView,
-    RunFailureCode, RunRequest,
+    PredictionEntry, PredictionStatus, PredictionSummary, PredictionView, RunFailureCode,
+    RunRequest,
 };
 pub use ids::{
-    ListCursor, MAX_CURSOR_BYTES, MAX_MODEL_ID_BYTES, MAX_PREDICTION_ID_BYTES, MediaIdError,
-    MediaModelId, MediaPredictionId,
+    MAX_MODEL_ID_BYTES, MAX_PREDICTION_ID_BYTES, MediaIdError, MediaModelId, MediaPredictionId,
 };
 pub use permissions::{MediaPermission, MediaScope};
 pub use resource::{
-    CatalogFilter, CatalogLimit, DEFAULT_MODELS_PER_PAGE, MAX_FILTER_BYTES, MAX_MODELS_PER_PAGE,
-    MediaDocument, MediaResource, MediaResourceError,
+    CatalogFilter, MAX_FILTER_BYTES, MediaDocument, MediaResource, MediaResourceError,
 };

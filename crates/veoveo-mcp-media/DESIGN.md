@@ -74,9 +74,31 @@ another instance's recovery, then deletes the registration.
 
 | Tool | Does | Requires |
 |---|---|---|
-| `models` | A page of the catalog, filtered by `query` or `type` | `media.models.read` |
+| `models` | A page of the catalog, filtered by `filters.query` or `filters.type` | `media.models.read` |
 | `model_schema` | One model with its input schema | `media.models.read` |
 | `run` | Runs a model as a Task; a plain call is refused | `media.generations.run` (billed) |
+
+The ready typed route table binds each tool request and resource reader to its output,
+policy and descriptor. `models` uses `List<ModelsTool>` and `Page<ModelCatalog>`; its
+JSON selection is `{filters, limit?, cursor?}`. Both collection resources use
+`ReadCollection` for central limit/cursor URI admission. Owner address definitions
+contain only path and filter fields; the SDK derives paging query arguments.
+
+Canonical collection responses are `{items, limit, nextCursor}`. A terminal cursor
+is null. Cursor tokens are opaque to callers, bounded to 4096 bytes, and refused if
+the effective family, filters or limit changes. The public model registry is global:
+its scope is the fixed `catalog` identity plus the immutable registry revision digest,
+with current route authorization on every request. Prediction cursors instead bind
+the current tenant, admitted principal and Hub profile. Core's Task query reapplies
+current labels and owner admission on every page; tokens carry no authority. Predictions use live descending `(created_at,
+task_id)` keysets, so concurrent insertion before the seek position is not included
+in the remaining traversal; deletions can reduce it. On unchanged data the order and
+unique task tiebreaker visit each selected run once.
+
+`run` returns a typed `Product<GenerationResult>`: `{resultUri, metadata}` with the
+same canonical URI as its generated MCP resource link. The result resource reads the
+metadata record itself. Output artifact arrays describe the single run; they are not
+collection tools.
 
 `run` checks the model and the input against the catalog before it creates the Task, so
 a bad request fails at once and costs nothing.
@@ -88,7 +110,7 @@ a bad request fails at once and costs nothing.
 | `media://docs`, `media://docs/{doc_id}`, `media://contract` | The embedded documents and the contract declaration |
 | `media://models{?query,type,limit,cursor}` | A catalog page of 20 models by default and at most 100, in model identity order |
 | `media://model/{+model_id}` | One model and the JSON Schema of its input |
-| `media://predictions{?cursor}` | A page of the caller's runs, newest first, 100 at a time |
+| `media://predictions{?limit,cursor}` | A page of the caller's runs, newest first, 100 by default and at most 100 |
 | `media://prediction/{prediction_id}` | One of the caller's runs by the provider's prediction |
 | `media://prediction/{prediction_id}/result` | A succeeded run's result |
 

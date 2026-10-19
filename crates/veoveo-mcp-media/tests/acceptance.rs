@@ -44,7 +44,7 @@ use veoveo_mcp_artifact::contract::{
 };
 use veoveo_mcp_media::{
     contract::{
-        CompletionMode, GenerationResult, MediaPredictionId, ModelCatalogPage, ModelSchema,
+        CompletionMode, GenerationResult, MediaPredictionId, ModelCatalog, ModelSchema,
         PredictionStatus, PredictionView,
     },
     fake::{
@@ -396,8 +396,9 @@ async fn a_large_output_streams_through_artifact_with_exact_bytes() -> Result<()
 async fn a_member_browses_models_and_is_refused_the_billed_run() -> Result<()> {
     let installation = Installation::from_env()?;
     let member = installation.connect(MEMBER).await?;
-    let models: ModelCatalogPage = call(&member, "media", "models", json!({})).await?;
-    ensure!(!models.models.is_empty(), "the member reads the catalog");
+    let models: veoveo_types::Page<ModelCatalog> =
+        call(&member, "media", "models", json!({"filters":{}})).await?;
+    ensure!(!models.items().is_empty(), "the member reads the catalog");
     let request = tool(
         "media",
         "run",
@@ -446,7 +447,7 @@ async fn a_real_provider_run_through_the_hub_stores_its_output_and_records_its_c
     let before = installation.generation_usage(ADMIN).await?;
 
     let (task_id, finished) = generate(&admin, &model, input, Duration::from_secs(30 * 60)).await?;
-    let result: GenerationResult = serde_json::from_value(finished["result"].clone())?;
+    let result: GenerationResult = serde_json::from_value(finished["result"]["metadata"].clone())?;
     ensure!(!result.artifacts.is_empty(), "the run stored its outputs");
 
     // Every output is the caller's in Artifact, and its bytes download in full.
@@ -664,6 +665,7 @@ fn generation(task: &DetailedTask) -> Result<GenerationResult> {
     Ok(serde_json::from_value(
         result
             .get("structuredContent")
+            .and_then(|product| product.get("metadata"))
             .cloned()
             .context("generation structured content")?,
     )?)
@@ -893,14 +895,15 @@ async fn catalog_schema_and_task_only_invocation_are_preserved() -> Result<()> {
     bounded(60, async {
         let installation = Installation::from_env()?;
         let member = installation.connect(MEMBER).await?;
-        let catalog: ModelCatalogPage = call(&member, "media", "models", json!({})).await?;
+        let catalog: veoveo_types::Page<ModelCatalog> =
+            call(&member, "media", "models", json!({"filters":{}})).await?;
         ensure!(
             catalog
-                .models
+                .items()
                 .iter()
                 .any(|model| model.model_id.as_str() == IMAGE_MODEL)
                 && catalog
-                    .models
+                    .items()
                     .iter()
                     .any(|model| model.model_id.as_str() == LARGE_MODEL),
             "expected fake models are missing"
@@ -1132,7 +1135,8 @@ async fn restart_persistence_verify() -> Result<()> {
         ensure!(listener.acknowledged() == &filter, "retained Task filter was not acknowledged");
         ensure!(next_task(&mut listener, &task_id).await?.payload == retained.payload,
             "fresh Task subscription did not open with retained completion");
-        let stored: GenerationResult = read(&caller, &result.result_uri.to_string()).await?;
+        let prediction = result.prediction.prediction_id.as_ref().context("retained provider prediction")?;
+        let stored: GenerationResult = read(&caller, &format!("media://prediction/{prediction}/result")).await?;
         let prediction_id = result.prediction.prediction_id.as_ref().context("retained provider prediction")?;
         let view: PredictionView = read(&caller, &format!("media://prediction/{prediction_id}")).await?;
         ensure!(result.prediction.completed_at.is_some() && stored.prediction.completed_at.is_some(),

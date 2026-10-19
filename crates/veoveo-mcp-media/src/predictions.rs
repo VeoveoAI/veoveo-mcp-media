@@ -6,29 +6,31 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
-use veoveo_store::{CursorScope, KeysetCursor};
+use veoveo_hub_sdk::{HubProfileId, definition::CollectionRequest};
 use veoveo_task::{
     TaskError, TaskOwner, TaskPageCursor, TaskPageOrder, TaskRuntime, TaskSnapshot, TaskStatus,
 };
 use veoveo_types::TaskId;
+use veoveo_types::{Page, Pager, PagingError};
 
 use crate::{
     contract::{
-        GeneratedArtifact, ListCursor, MediaPredictionId, PredictionStatus, PredictionSummary,
-        RunFailureCode, RunRequest,
+        GeneratedArtifact, MediaPredictionId, MediaResource, PredictionCollection, PredictionEntry,
+        PredictionKeyset, PredictionStatus, PredictionSummary, RunFailureCode, RunRequest,
     },
     run::{RUN, STORING_MESSAGE},
     store::{AgedRun, MediaStore, MediaStoreError, PredictionRow, stored_tenant},
 };
-
-/// The most predictions one listing page holds.
-pub const PREDICTIONS_PER_PAGE: usize = 100;
 
 /// Why a prediction read failed.
 #[derive(Debug, thiserror::Error)]
 pub enum PredictionError {
     #[error("the cursor belongs to another listing; start from the first page")]
     StaleCursor,
+    #[error(transparent)]
+    Paging(#[from] PagingError),
+    #[error("the Task owner profile is invalid")]
+    InvalidProfile,
     #[error(transparent)]
     Store(#[from] MediaStoreError),
     #[error(transparent)]
@@ -112,13 +114,6 @@ impl Prediction {
     }
 }
 
-/// A page of predictions and the cursor of the next one.
-#[derive(Debug, Clone)]
-pub struct PredictionPage {
-    pub items: Vec<Prediction>,
-    pub next: Option<ListCursor>,
-}
-
 /// Media's predictions over core's Task runtime and Media's store.
 #[derive(Clone)]
 pub struct Predictions {
@@ -174,26 +169,30 @@ impl Predictions {
         Ok(Some(Prediction { task, row }))
     }
 
-    /// One page of `owner`'s predictions, newest first, after `cursor`.
+    /// A caller-bound page. The Task runtime applies current owner/profile/labels;
+    /// the shared pager owns lookahead and continuation construction.
     pub async fn page(
         &self,
         owner: &TaskOwner,
-        cursor: Option<&ListCursor>,
-    ) -> Result<PredictionPage, PredictionError> {
-        let scope = CursorScope::new(
-            "media.predictions",
+        request: &CollectionRequest<PredictionCollection>,
+    ) -> Result<Page<PredictionCollection>, PredictionError> {
+        let profile = HubProfileId::parse(owner.surface.as_str())
+            .map_err(|_| PredictionError::InvalidProfile)?;
+        let pager = Pager::<PredictionCollection>::new(
             owner.tenant(),
-            &owner.principal_key.to_string(),
+            *request.filters(),
+            request.limit(),
+            PredictionKeyset::new(owner.principal_key.clone(), profile),
+            request.cursor(),
         )
-        .map_err(|_| PredictionError::StaleCursor)?;
-        let after = cursor
-            .map(|wire| {
-                scope
-                    .parse::<TaskPageCursor>(wire.as_str())
-                    .map(|cursor: KeysetCursor<TaskPageCursor>| cursor.position().clone())
-            })
-            .transpose()
-            .map_err(|_| PredictionError::StaleCursor)?;
+        .map_err(paging_error)?;
+        let after = pager.after().map(|position| {
+            TaskPageCursor::from_position(
+                TaskPageOrder::NewestFirst,
+                position.created_at,
+                position.task_id,
+            )
+        });
         let page = self
             .tasks
             .for_owner(owner)
@@ -201,13 +200,9 @@ impl Predictions {
             .page(
                 TaskPageOrder::NewestFirst,
                 after.as_ref(),
-                PREDICTIONS_PER_PAGE,
+                pager.fetch_limit() as usize,
             )
-            .await
-            .map_err(|error| match error {
-                TaskError::PageOrderMismatch { .. } => PredictionError::StaleCursor,
-                error => PredictionError::Tasks(error),
-            })?;
+            .await?;
         let ids: Vec<TaskId> = page.items.iter().map(|task| task.task_id).collect();
         let mut rows: BTreeMap<TaskId, PredictionRow> = self
             .store
@@ -221,19 +216,17 @@ impl Predictions {
             .into_iter()
             .map(|task| {
                 let row = rows.remove(&task.task_id);
-                Prediction { task, row }
+                let prediction = Prediction { task, row }.summary()?;
+                Ok(PredictionEntry {
+                    prediction_uri: prediction
+                        .prediction_id
+                        .clone()
+                        .map(MediaResource::Prediction),
+                    prediction,
+                })
             })
-            .collect();
-        let next = page
-            .next_cursor
-            .map(|next| {
-                let cursor = scope
-                    .cursor(next)
-                    .map_err(|_| PredictionError::StaleCursor)?;
-                ListCursor::parse(cursor.as_str()).map_err(|_| PredictionError::StaleCursor)
-            })
-            .transpose()?;
-        Ok(PredictionPage { items, next })
+            .collect::<Result<Vec<_>, MediaStoreError>>()?;
+        pager.finish(items).map_err(paging_error)
     }
 
     /// Delete the rows of runs recorded before `cutoff` whose Task core's Task runtime no
@@ -269,5 +262,12 @@ impl Predictions {
             .into_iter()
             .map(|task| task.task_id)
             .collect())
+    }
+}
+
+fn paging_error(error: PagingError) -> PredictionError {
+    match error {
+        PagingError::Cursor(_) => PredictionError::StaleCursor,
+        other => PredictionError::Paging(other),
     }
 }

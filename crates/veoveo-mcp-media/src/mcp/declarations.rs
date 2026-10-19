@@ -17,10 +17,10 @@ pub static REGISTRATION: OnceLock<RegistrationDeclaration> = OnceLock::new();
 /// Media's identity and the URL where the Hub reaches its MCP endpoint:
 /// `{public_base_url}/media/mcp`.
 pub fn registration(deployment: &PublicDeployment) -> anyhow::Result<RegistrationDeclaration> {
-    let endpoint = deployment.server(MediaContract::slug().as_str())?;
+    let endpoint = deployment.server(crate::server().as_str())?;
     let url = url::Url::parse(&format!("{}/mcp", endpoint.public_url()))?;
     Ok(RegistrationDeclaration {
-        slug: MediaContract::slug(),
+        slug: crate::server(),
         uri_scheme: MediaContract::scheme(),
         version: ServerVersion::new(env!("CARGO_PKG_VERSION"))?,
         endpoint: ServerEndpoint::new(url)?,

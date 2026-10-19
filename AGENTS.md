@@ -14,7 +14,7 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
   from it.
 - A server that calls another server depends on that server's `contract` feature by Git
   revision, declares the permissions it calls with through
-  `AuthorizationBuilder::uses`, and calls through `ctx.client()` in a handler or
+  the ready route builder’s `uses`, and calls through `ctx.client()` in a handler or
   `ServerCalls::for_task` in a Task worker, as the SDK's
   [calls to other servers](https://github.com/VeoveoAI/veoveo-hub-sdk/blob/main/crates/veoveo-hub-sdk/DESIGN.md#calls-to-other-servers)
   describe. A server whose tools others call publishes each tool's request as a
@@ -56,8 +56,8 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
   an index whose leading columns are each foreign key's, and a
   `COMMENT ON TABLE … IS 'Retention: …'`. A statement that cannot comply carries a
   `-- veoveo:` marker that states its reason.
-- Page a listing with core's `PageSize` and a `KeysetCursor` from a `CursorScope`
-  bound to the listing and the tenant, with one statement for the first page and one
+- Construct listings with core's `Collection`, `PageSize` and `Pager`, binding cursors
+  to the collection, tenant and effective selection, with one statement for the first page and one
   for the pages after a cursor. Do not write a `$cursor IS NULL OR …` predicate, which
   loses the index seek in a cached generic plan.
 - The real generation provider is reached only by the ignored qualification test, run by

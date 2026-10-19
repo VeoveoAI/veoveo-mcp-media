@@ -1,49 +1,70 @@
-//! Media as a provider of calls between servers. Each tool's request names its tool and
-//! its typed result, so a server that declares uses of Media's permissions calls Media
-//! through the Hub with the SDK's `HubClient`; `run` starts a Task whose handle
-//! resolves with the generation's result.
-use veoveo_hub_sdk::calls::{ProviderContract, TaskToolCall, ToolCall};
+//! Media's typed calls and resource routes, shared by clients and hosting.
+use veoveo_hub_sdk::{calls::ProviderContract, definition::NoFilters};
 use veoveo_types::ServerSlug;
 
 use super::{
-    GenerationResult, ModelCatalogPage, ModelSchema, ModelSchemaRequest, ModelsRequest, RunRequest,
+    GenerationResult, MediaModelId, MediaPredictionId, MediaResource, ModelCatalog, ModelFilters,
+    ModelSchema, PredictionCollection, PredictionView,
 };
 
-/// The Media server, the provider these calls reach.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MediaProvider;
-
 impl ProviderContract for MediaProvider {
     fn slug() -> ServerSlug {
         crate::server()
     }
 }
 
-impl ToolCall for ModelsRequest {
-    type Provider = MediaProvider;
-    type Output = ModelCatalogPage;
-    const TOOL: &'static str = "models";
+#[derive(Debug, Clone)]
+#[veoveo_hub_sdk::collection_resource(
+    provider = MediaProvider, address_type = MediaResource, collection = ModelCatalog,
+    template = "media://models{?query,type}", default_limit = 20,
+    address = MediaResource::Models { query: self.filters.query.clone(), model_type: self.filters.model_type.clone() },
+    filters = self.filters.clone(),
+    parse = |address| match address {
+        MediaResource::Models { query, model_type } => Some(Self { filters: ModelFilters {query: query.clone(), model_type: model_type.clone()} }),
+        _ => None
+    }
+)]
+pub struct ReadModels {
+    pub filters: ModelFilters,
 }
 
-impl ToolCall for ModelSchemaRequest {
-    type Provider = MediaProvider;
-    type Output = ModelSchema;
-    const TOOL: &'static str = "model_schema";
+#[derive(Debug, Clone)]
+#[veoveo_hub_sdk::resource_read(
+    provider = MediaProvider, address_type = MediaResource, content = ModelSchema,
+    template = "media://model/{+model_id}", address = MediaResource::Model(self.model.clone()),
+    parse = |address| match address { MediaResource::Model(model) => Some(Self {model: model.clone()}), _ => None }
+)]
+pub struct ReadModel {
+    pub model: MediaModelId,
 }
 
-impl ToolCall for RunRequest {
-    type Provider = MediaProvider;
-    type Output = GenerationResult;
-    const TOOL: &'static str = "run";
+#[derive(Debug, Clone)]
+#[veoveo_hub_sdk::collection_resource(
+    provider = MediaProvider, address_type = MediaResource, collection = PredictionCollection,
+    template = "media://predictions", address = MediaResource::Predictions,
+    filters = NoFilters {},
+    parse = |address| match address { MediaResource::Predictions => Some(Self), _ => None }
+)]
+pub struct ReadPredictions;
+
+#[derive(Debug, Clone)]
+#[veoveo_hub_sdk::resource_read(
+    provider = MediaProvider, address_type = MediaResource, content = PredictionView,
+    template = "media://prediction/{prediction_id}", address = MediaResource::Prediction(self.prediction.clone()),
+    parse = |address| match address { MediaResource::Prediction(prediction) => Some(Self {prediction: prediction.clone()}), _ => None }
+)]
+pub struct ReadPrediction {
+    pub prediction: MediaPredictionId,
 }
 
-impl TaskToolCall for RunRequest {}
-
-/// Every tool Media serves, as its typed calls name them.
-pub fn served_tools() -> [&'static str; 3] {
-    [
-        <ModelsRequest as ToolCall>::TOOL,
-        <ModelSchemaRequest as ToolCall>::TOOL,
-        <RunRequest as ToolCall>::TOOL,
-    ]
+#[derive(Debug, Clone)]
+#[veoveo_hub_sdk::resource_read(
+    provider = MediaProvider, address_type = MediaResource, content = GenerationResult,
+    template = "media://prediction/{prediction_id}/result", address = MediaResource::Result(self.prediction.clone()),
+    parse = |address| match address { MediaResource::Result(prediction) => Some(Self {prediction: prediction.clone()}), _ => None }
+)]
+pub struct ReadResult {
+    pub prediction: MediaPredictionId,
 }

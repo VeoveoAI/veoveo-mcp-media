@@ -4,29 +4,47 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{CatalogFilter, CatalogLimit, ListCursor, MediaModelId, MediaResource};
+use super::{CatalogFilter, MediaModelId, MediaResource};
 
-/// The arguments of `models`.
+/// The client-controlled selection of a model catalog page.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ModelsRequest {
-    /// Case-insensitive search over a model's identity, name, type and description.
+pub struct ModelFilters {
+    /// Case-insensitive search over identity, name, type and description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<CatalogFilter>,
-    /// An exact model type, such as `text-to-image`, `image-to-image` or `text-to-video`.
+    /// An exact model type, such as `text-to-image`.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub model_type: Option<CatalogFilter>,
-    /// How many models the page holds; 20 by default and at most 100.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<CatalogLimit>,
-    /// The previous page's `nextCursor`, with the same filters and limit.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cursor: Option<ListCursor>,
+}
+
+/// The `models` collection tool; its request is `List<ModelsTool>`.
+#[veoveo_hub_sdk::collection_tool(
+    provider = super::MediaProvider,
+    collection = ModelCatalog,
+    name = "models",
+    default_limit = 20
+)]
+pub struct ModelsTool;
+
+/// A model registry collection in unique model identity order.
+pub struct ModelCatalog;
+impl veoveo_types::Collection for ModelCatalog {
+    type Item = ModelCatalogItem;
+    type Filters = ModelFilters;
+    type Key = MediaModelId;
+    type Limit = veoveo_types::PageSize<100>;
+    type Policy = veoveo_types::RevisionBound;
+    const NAME: &'static str = "media.models";
+    fn key(item: &ModelCatalogItem) -> MediaModelId {
+        item.model_id.clone()
+    }
 }
 
 /// The arguments of `model_schema`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[veoveo_hub_sdk::tool(provider = super::MediaProvider, output = ModelSchema, name = "model_schema")]
 pub struct ModelSchemaRequest {
     /// The exact model, such as `owner/model`.
     pub model: MediaModelId,
@@ -50,24 +68,10 @@ pub struct ModelCatalogItem {
     pub schema_uri: MediaResource,
 }
 
-/// One page of the model catalog, in model identity order.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ModelCatalogPage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub query: Option<CatalogFilter>,
-    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
-    pub model_type: Option<CatalogFilter>,
-    /// How many models match the filters in the whole catalog.
-    pub total_available: u64,
-    pub limit: CatalogLimit,
-    pub models: Vec<ModelCatalogItem>,
-    /// The cursor of the next page, or `null` on the last page.
-    pub next_cursor: Option<ListCursor>,
-}
-
 /// One model with the JSON Schema its run input must satisfy.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, veoveo_hub_sdk::SingleOutput,
+)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelSchema {
     pub model_id: MediaModelId,
