@@ -17,8 +17,8 @@ use rmcp::{
     ErrorData as McpError, RoleServer,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
-        CallToolResult, CompleteRequestParams, CompleteResult, GetPromptRequestParams,
-        GetPromptResult, Prompt, ReadResourceRequestParams, Reference,
+        CallToolResult, ClientCapabilities, CompleteRequestParams, CompleteResult,
+        GetPromptRequestParams, GetPromptResult, Prompt, ReadResourceRequestParams, Reference,
     },
     service::RequestContext,
     tool, tool_router,
@@ -134,9 +134,8 @@ impl MediaMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         require(&context, Target::Tool("run"))?;
-        Err(McpError::invalid_request(
-            "run runs as a Task; call it with Task support",
-            None,
+        Err(McpError::missing_required_client_capability(
+            ClientCapabilities::builder().enable_tasks().build(),
         ))
     }
 }
