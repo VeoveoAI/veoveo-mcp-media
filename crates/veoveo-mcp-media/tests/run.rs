@@ -33,12 +33,15 @@ use veoveo_mcp_media::{
         GenerationResult, MediaPermission, MediaPredictionId, PredictionCollection,
         PredictionStatus,
     },
-    fake::{FAILING_MODEL, IMAGE_BYTES, IMAGE_MODEL, LARGE_BYTES, LARGE_MODEL, output_byte},
+    fake::{
+        FAILING_MODEL, FakeObservation, IMAGE_BYTES, IMAGE_MODEL, LARGE_BYTES, LARGE_MODEL,
+        output_byte,
+    },
     mcp::identity,
     predictions::Prediction,
     provider::generation_key,
 };
-use veoveo_task::{OperationState, TaskStatus};
+use veoveo_task::{OperationState, TaskPageOrder, TaskStatus};
 use veoveo_types::{InvocationMode, PageSize, TaskId};
 
 fn prompt() -> Value {
@@ -505,6 +508,75 @@ async fn a_provider_failure_fails_the_run_and_still_reconciles_its_bill() {
 }
 
 #[tokio::test]
+async fn a_run_without_tasks_support_is_refused_before_any_work() {
+    within(async {
+        let harness = harness(true).await;
+        let answer = harness
+            .mesh
+            .call(
+                "media",
+                "run",
+                json!({
+                    "model": IMAGE_MODEL, "input": prompt()
+                }),
+            )
+            .await;
+        assert_eq!(answer["error"]["code"], -32021, "{answer}");
+        assert_eq!(
+            answer["error"]["data"]["requiredCapabilities"],
+            json!({
+                "extensions": {"io.modelcontextprotocol/tasks": {}}
+            }),
+            "{answer}"
+        );
+        assert!(answer.get("result").is_none(), "{answer}");
+        assert!(
+            harness
+                .runtime()
+                .for_owner(&owner())
+                .page(TaskPageOrder::OldestFirst, None, 1)
+                .await
+                .unwrap()
+                .items
+                .is_empty()
+        );
+        let observed: FakeObservation =
+            reqwest::get(harness.fake().base().join("/testing/state").unwrap())
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+        assert_eq!((observed.quotes, observed.submissions), (0, 0));
+
+        // Tasks remain mandatory for run; ordinary catalog tools are unchanged.
+        let models = harness
+            .mesh
+            .call("media", "models", json!({"filters":{}}))
+            .await;
+        assert_eq!(
+            models["result"]["structuredContent"]["items"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3,
+            "{models}"
+        );
+        let schema = harness
+            .mesh
+            .call("media", "model_schema", json!({"model": IMAGE_MODEL}))
+            .await;
+        assert_eq!(
+            schema["result"]["structuredContent"]["modelId"], IMAGE_MODEL,
+            "{schema}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn a_caller_without_the_run_permission_starts_nothing() {
     within(async {
         let granted = vec![
@@ -514,6 +586,25 @@ async fn a_caller_without_the_run_permission_starts_nothing() {
             ArtifactPermission::ArtifactsWrite.name(),
         ];
         let harness = harness_granting(true, granted).await;
+        // Permission denial still precedes the missing-capability refusal.
+        let ordinary = harness
+            .mesh
+            .call(
+                "media",
+                "run",
+                json!({
+                    "model": IMAGE_MODEL, "input": prompt()
+                }),
+            )
+            .await;
+        assert_eq!(ordinary["error"]["code"], -32600, "{ordinary}");
+        assert!(
+            ordinary["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("media.generations.run"),
+            "{ordinary}"
+        );
         let answer = harness
             .mesh
             .start_task(

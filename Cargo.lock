@@ -4248,7 +4248,7 @@ dependencies = [
 [[package]]
 name = "veoveo-hub-sdk"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=c6ef6a1383d8e8f7f35434a5f224898fbb123081#c6ef6a1383d8e8f7f35434a5f224898fbb123081"
+source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=b3da412fffa67420148bd677645d4b27f072d7a2#b3da412fffa67420148bd677645d4b27f072d7a2"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
@@ -4297,7 +4297,7 @@ dependencies = [
 [[package]]
 name = "veoveo-hub-sdk-macros"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=c6ef6a1383d8e8f7f35434a5f224898fbb123081#c6ef6a1383d8e8f7f35434a5f224898fbb123081"
+source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=b3da412fffa67420148bd677645d4b27f072d7a2#b3da412fffa67420148bd677645d4b27f072d7a2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4318,7 +4318,7 @@ dependencies = [
 [[package]]
 name = "veoveo-mcp-artifact"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=4aa52b18744ad55937fa94e7fce658b5a21447db#4aa52b18744ad55937fa94e7fce658b5a21447db"
+source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=00c8e93f5ca3ffe9137773754a4945c6d349b3bf#00c8e93f5ca3ffe9137773754a4945c6d349b3bf"
 dependencies = [
  "anyhow",
  "aws-sdk-s3",

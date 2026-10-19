@@ -934,8 +934,14 @@ async fn catalog_schema_and_task_only_invocation_are_preserved() -> Result<()> {
             .await
         {
             Err(ServiceError::McpError(error)) => ensure!(
-                error.code == ErrorCode::INVALID_REQUEST
-                    && error.message == "run runs as a Task; call it with Task support",
+                error.code == ErrorCode::MISSING_REQUIRED_CLIENT_CAPABILITY
+                    && error
+                        .data
+                        .as_ref()
+                        .is_some_and(|data| data["requiredCapabilities"]
+                            == json!({
+                                "extensions": {"io.modelcontextprotocol/tasks": {}}
+                            })),
                 "ordinary invocation was refused with another MCP error"
             ),
             Err(error) => {
@@ -944,9 +950,10 @@ async fn catalog_schema_and_task_only_invocation_are_preserved() -> Result<()> {
             }
             Ok(_) => bail!("ordinary call reached Task-only run"),
         }
+        let after = installation.observation().await?;
         ensure!(
-            installation.observation().await?.submissions == before.submissions,
-            "ordinary call reached provider"
+            after.quotes == before.quotes && after.submissions == before.submissions,
+            "ordinary call quoted or dispatched provider work"
         );
         Ok(())
     })

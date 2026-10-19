@@ -13,7 +13,7 @@ use std::sync::{Arc, LazyLock};
 
 use rmcp::{
     ErrorData as McpError, RoleServer,
-    model::{CompleteRequestParams, CompleteResult, Reference},
+    model::{ClientCapabilities, CompleteRequestParams, CompleteResult, Reference},
     service::RequestContext,
 };
 use veoveo_hub_sdk::{
@@ -95,9 +95,8 @@ impl MediaMcp {
         _: RunRequest,
         _: RequestContext<RoleServer>,
     ) -> Result<Product<GenerationResult>, McpError> {
-        Err(McpError::invalid_request(
-            "run runs as a Task; call it with Task support",
-            None,
+        Err(McpError::missing_required_client_capability(
+            ClientCapabilities::builder().enable_tasks().build(),
         ))
     }
 }
