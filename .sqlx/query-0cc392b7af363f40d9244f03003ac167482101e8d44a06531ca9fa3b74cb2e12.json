@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- The first page of the readable artifacts of one owner, newest first, with one row\n-- of lookahead. Visibility is part of the statement, so the limit counts only rows the\n-- caller may read.\n-- Parameters $1 to $9 are the caller's facts for artifact.effective_level: tenant,\n-- principal, principal key, groups, their roles, Work Context, membership, labels and time.\nSELECT\n    a.artifact_id AS \"artifact_id: ArtifactId\",\n    a.owner_key,\n    a.work_context,\n    a.name,\n    a.media_type,\n    a.size_bytes,\n    a.sha256,\n    a.labels,\n    a.release_state AS \"release_state: ReleaseState\",\n    a.state AS \"state: ArtifactState\",\n    a.provenance AS \"provenance: Json<ArtifactProvenance>\",\n    a.metadata AS \"metadata: Json<ArtifactMetadataMap>\",\n    a.created_at,\n    a.available_at,\n    a.retain_until,\n    artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) AS \"level!: i16\"\nFROM artifact.artifact AS a\nWHERE a.tenant = $1\n    AND a.owner = $10\n    AND a.state IN ('verifying', 'available')\n    AND artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) >= 1\nORDER BY a.artifact_id DESC\nLIMIT $11\n",
+  "query": "-- A new artifact waiting for its bytes. Its creator owns it, so the creator administers it.\nINSERT INTO artifact.artifact AS a (\n    tenant, artifact_id, owner, owner_key, work_context, name, media_type, labels,\n    release_state, state, provenance, metadata, retention_days, created_at\n)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'private', 'uploading', $9, $10, $11, $12)\nRETURNING\n    a.artifact_id AS \"artifact_id: ArtifactId\",\n    a.owner_key,\n    a.work_context,\n    a.name,\n    a.media_type,\n    a.size_bytes,\n    a.labels,\n    a.release_state AS \"release_state: ReleaseState\",\n    a.state AS \"state: ArtifactState\",\n    a.provenance AS \"provenance: Json<ArtifactProvenance>\",\n    a.metadata AS \"metadata: Json<ArtifactMetadataMap>\",\n    a.created_at,\n    a.available_at,\n    a.retain_until,\n    3::smallint AS \"level!: i16\"\n",
   "describe": {
     "columns": [
       {
@@ -71,17 +71,6 @@
       },
       {
         "ordinal": 6,
-        "name": "sha256",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "artifact.artifact",
-            "name": "sha256"
-          }
-        }
-      },
-      {
-        "ordinal": 7,
         "name": "labels",
         "type_info": "TextArray",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "release_state: ReleaseState",
         "type_info": "Text",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "state: ArtifactState",
         "type_info": "Text",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "provenance: Json<ArtifactProvenance>",
         "type_info": "Jsonb",
         "origin": {
@@ -125,7 +114,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "metadata: Json<ArtifactMetadataMap>",
         "type_info": "Jsonb",
         "origin": {
@@ -136,7 +125,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -147,7 +136,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "available_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -158,7 +147,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 13,
         "name": "retain_until",
         "type_info": "Timestamptz",
         "origin": {
@@ -169,7 +158,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 14,
         "name": "level!: i16",
         "type_info": "Int2",
         "origin": "Expression"
@@ -179,15 +168,16 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "Text",
-        "TextArray",
-        "TextArray",
-        "Text",
-        "Text",
-        "TextArray",
-        "Timestamptz",
         "Uuid",
-        "Int8"
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Jsonb",
+        "Jsonb",
+        "Int4",
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -196,7 +186,6 @@
       false,
       false,
       false,
-      true,
       true,
       false,
       false,
@@ -209,5 +198,5 @@
       null
     ]
   },
-  "hash": "1a992321116c7ab5959892f24d48a96697a98bfe683b506f8a7162fb62aaefeb"
+  "hash": "0cc392b7af363f40d9244f03003ac167482101e8d44a06531ca9fa3b74cb2e12"
 }

@@ -170,7 +170,6 @@ async fn one_real_generation_runs_through_the_full_flow() {
         output_max_bytes: 512 * 1024 * 1024,
         output_timeout: Duration::from_secs(10 * 60),
         output_hosts,
-        verification_timeout: Duration::from_secs(10 * 60),
         output_retention: None,
     };
     let harness = harness_for(

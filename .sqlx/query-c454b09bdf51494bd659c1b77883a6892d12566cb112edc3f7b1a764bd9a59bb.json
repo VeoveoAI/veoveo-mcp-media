@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- A page of the readable artifacts in one release state after a cursor's key.\n-- Parameters $1 to $9 are the caller's facts for artifact.effective_level: tenant,\n-- principal, principal key, groups, their roles, Work Context, membership, labels and time.\nSELECT\n    a.artifact_id AS \"artifact_id: ArtifactId\",\n    a.owner_key,\n    a.work_context,\n    a.name,\n    a.media_type,\n    a.size_bytes,\n    a.sha256,\n    a.labels,\n    a.release_state AS \"release_state: ReleaseState\",\n    a.state AS \"state: ArtifactState\",\n    a.provenance AS \"provenance: Json<ArtifactProvenance>\",\n    a.metadata AS \"metadata: Json<ArtifactMetadataMap>\",\n    a.created_at,\n    a.available_at,\n    a.retain_until,\n    artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) AS \"level!: i16\"\nFROM artifact.artifact AS a\nWHERE a.tenant = $1\n    AND a.release_state = $10\n    AND a.artifact_id < $11\n    AND a.state IN ('verifying', 'available')\n    AND artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) >= 1\nORDER BY a.artifact_id DESC\nLIMIT $12\n",
+  "query": "-- The first page of the readable artifacts of one owner, newest first, with one row\n-- of lookahead. Visibility is part of the statement, so the limit counts only rows the\n-- caller may read.\n-- Parameters $1 to $9 are the caller's facts for artifact.effective_level: tenant,\n-- principal, principal key, groups, their roles, Work Context, membership, labels and time.\nSELECT\n    a.artifact_id AS \"artifact_id: ArtifactId\",\n    a.owner_key,\n    a.work_context,\n    a.name,\n    a.media_type,\n    a.size_bytes,\n    a.labels,\n    a.release_state AS \"release_state: ReleaseState\",\n    a.state AS \"state: ArtifactState\",\n    a.provenance AS \"provenance: Json<ArtifactProvenance>\",\n    a.metadata AS \"metadata: Json<ArtifactMetadataMap>\",\n    a.created_at,\n    a.available_at,\n    a.retain_until,\n    artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) AS \"level!: i16\"\nFROM artifact.artifact AS a\nWHERE a.tenant = $1\n    AND a.owner = $10\n    AND a.state = 'available'\n    AND artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) >= 1\nORDER BY a.artifact_id DESC\nLIMIT $11\n",
   "describe": {
     "columns": [
       {
@@ -71,17 +71,6 @@
       },
       {
         "ordinal": 6,
-        "name": "sha256",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "artifact.artifact",
-            "name": "sha256"
-          }
-        }
-      },
-      {
-        "ordinal": 7,
         "name": "labels",
         "type_info": "TextArray",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "release_state: ReleaseState",
         "type_info": "Text",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "state: ArtifactState",
         "type_info": "Text",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "provenance: Json<ArtifactProvenance>",
         "type_info": "Jsonb",
         "origin": {
@@ -125,7 +114,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "metadata: Json<ArtifactMetadataMap>",
         "type_info": "Jsonb",
         "origin": {
@@ -136,7 +125,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -147,7 +136,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "available_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -158,7 +147,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 13,
         "name": "retain_until",
         "type_info": "Timestamptz",
         "origin": {
@@ -169,7 +158,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 14,
         "name": "level!: i16",
         "type_info": "Int2",
         "origin": "Expression"
@@ -186,7 +175,6 @@
         "Text",
         "TextArray",
         "Timestamptz",
-        "Text",
         "Uuid",
         "Int8"
       ]
@@ -197,7 +185,6 @@
       false,
       false,
       false,
-      true,
       true,
       false,
       false,
@@ -210,5 +197,5 @@
       null
     ]
   },
-  "hash": "deed442e7eb8e74f5d61d9b3b8c4548afd71e61c56e625e72a6e70168b652b8c"
+  "hash": "c454b09bdf51494bd659c1b77883a6892d12566cb112edc3f7b1a764bd9a59bb"
 }

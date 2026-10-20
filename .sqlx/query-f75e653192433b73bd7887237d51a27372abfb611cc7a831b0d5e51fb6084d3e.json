@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- The first page of the caller's uploads, newest first, with one row of lookahead.\nSELECT\n    upload_id AS \"upload_id: UploadId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    creator AS \"creator: StoredPrincipal\",\n    form AS \"form: UploadForm\",\n    state AS \"state: UploadState\",\n    declared_size,\n    declared_sha256,\n    max_size,\n    reserved_bytes,\n    object_upload,\n    part_size,\n    created_at,\n    expires_at,\n    ended_at\nFROM artifact.upload\nWHERE tenant = $1 AND creator = $2\nORDER BY upload_id DESC\nLIMIT $3\n",
+  "query": "-- The first page of the caller's uploads, newest first, with one row of lookahead.\nSELECT\n    upload_id AS \"upload_id: UploadId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    creator AS \"creator: StoredPrincipal\",\n    form AS \"form: UploadForm\",\n    state AS \"state: UploadState\",\n    declared_size,\n    max_size,\n    reserved_bytes,\n    object_upload,\n    part_size,\n    created_at,\n    expires_at,\n    ended_at\nFROM artifact.upload\nWHERE tenant = $1 AND creator = $2\nORDER BY upload_id DESC\nLIMIT $3\n",
   "describe": {
     "columns": [
       {
@@ -71,17 +71,6 @@
       },
       {
         "ordinal": 6,
-        "name": "declared_sha256",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "artifact.upload",
-            "name": "declared_sha256"
-          }
-        }
-      },
-      {
-        "ordinal": 7,
         "name": "max_size",
         "type_info": "Int8",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "reserved_bytes",
         "type_info": "Int8",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "object_upload",
         "type_info": "Text",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "part_size",
         "type_info": "Int8",
         "origin": {
@@ -125,7 +114,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -136,7 +125,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "expires_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -147,7 +136,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "ended_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -173,7 +162,6 @@
       false,
       true,
       true,
-      true,
       false,
       true,
       true,
@@ -182,5 +170,5 @@
       true
     ]
   },
-  "hash": "d83f4e6dc010290c7da2acfb3a7c47b986983a708a37d785063ab1bf658532d1"
+  "hash": "f75e653192433b73bd7887237d51a27372abfb611cc7a831b0d5e51fb6084d3e"
 }

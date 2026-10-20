@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- End an open upload as completed, aborted or expired. Triggers release its reservation.\nUPDATE artifact.upload\nSET state = $3, ended_at = $4\n-- `ended_at` is null exactly while the upload is open; testing it keeps the statement on\n-- the primary key rather than the expiry queue's partial index.\nWHERE tenant = $1 AND upload_id = $2 AND ended_at IS NULL\nRETURNING\n    upload_id AS \"upload_id: UploadId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    creator AS \"creator: StoredPrincipal\",\n    form AS \"form: UploadForm\",\n    state AS \"state: UploadState\",\n    declared_size,\n    declared_sha256,\n    max_size,\n    reserved_bytes,\n    object_upload,\n    part_size,\n    created_at,\n    expires_at,\n    ended_at\n",
+  "query": "-- The upload an acting identity already created with this idempotency key.\nSELECT\n    upload_id AS \"upload_id: UploadId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    creator AS \"creator: StoredPrincipal\",\n    form AS \"form: UploadForm\",\n    state AS \"state: UploadState\",\n    declared_size,\n    max_size,\n    reserved_bytes,\n    object_upload,\n    part_size,\n    created_at,\n    expires_at,\n    ended_at\nFROM artifact.upload\nWHERE tenant = $1 AND acting_identity = $2 AND idempotency_key = $3\n",
   "describe": {
     "columns": [
       {
@@ -71,17 +71,6 @@
       },
       {
         "ordinal": 6,
-        "name": "declared_sha256",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "artifact.upload",
-            "name": "declared_sha256"
-          }
-        }
-      },
-      {
-        "ordinal": 7,
         "name": "max_size",
         "type_info": "Int8",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "reserved_bytes",
         "type_info": "Int8",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "object_upload",
         "type_info": "Text",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "part_size",
         "type_info": "Int8",
         "origin": {
@@ -125,7 +114,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -136,7 +125,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "expires_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -147,7 +136,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "ended_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -161,9 +150,8 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid",
         "Text",
-        "Timestamptz"
+        "Text"
       ]
     },
     "nullable": [
@@ -174,7 +162,6 @@
       false,
       true,
       true,
-      true,
       false,
       true,
       true,
@@ -183,5 +170,5 @@
       true
     ]
   },
-  "hash": "d498279ef59ef7a11e915a011c23018418e926166ffb20222d2605dbc01106f1"
+  "hash": "9a9501e9da9001f698e16552379bc880e5f77da6a99b7f6bbccc174506dbac49"
 }

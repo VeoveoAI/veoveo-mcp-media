@@ -196,7 +196,7 @@ redirects, each to an allowed host over HTTP or HTTPS; a redirect anywhere else 
 the output. No output is held in
 memory whole. The upload carries the idempotency key `media:{task}:output:{index}`, the
 caller's labels and metadata naming the Task, the prediction, the model and the index,
-and waits for Artifact to verify the bytes. A result links each output by its address,
+and resolves after Artifact completes create-only storage and validates size. A result links each output by its address,
 `artifact://artifacts/{artifact_id}`, and never carries a download URL.
 
 ### Costs

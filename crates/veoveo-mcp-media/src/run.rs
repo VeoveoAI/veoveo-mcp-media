@@ -122,8 +122,6 @@ pub struct RunSettings {
     /// The hosts outputs may be fetched from, as `host` or `host:port`. Empty admits the
     /// provider's own host only.
     pub output_hosts: BTreeSet<String>,
-    /// How long a run waits for Artifact to verify a stored output.
-    pub verification_timeout: Duration,
     /// How long Artifact keeps a run's outputs, when the installation bounds it.
     pub output_retention: Option<RetentionDays>,
 }
@@ -144,7 +142,6 @@ impl Default for RunSettings {
             output_max_bytes: 2 * 1024 * 1024 * 1024,
             output_timeout: Duration::from_secs(15 * 60),
             output_hosts: BTreeSet::new(),
-            verification_timeout: Duration::from_secs(10 * 60),
             output_retention: None,
         }
     }
@@ -828,8 +825,7 @@ async fn store_output(
                 .map_err(|error| anyhow!("{error}"))?,
         )
         .labels(labels)
-        .metadata(ArtifactMetadataMap::new(metadata).map_err(|error| anyhow!("{error}"))?)
-        .until_verified(settings.verification_timeout);
+        .metadata(ArtifactMetadataMap::new(metadata).map_err(|error| anyhow!("{error}"))?);
     if let Some(days) = settings.output_retention {
         upload = upload.retention(days);
     }

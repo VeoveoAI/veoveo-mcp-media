@@ -169,7 +169,7 @@ reference variables:
 these explicit expected inputs and the billed principal, rather than guessed from
 an opaque token. Signed download JSON TextContent must equal `structuredContent`;
 the test parses that text, then sends the exact GET URL and every signed header and
-checks bytes and SHA-256 without logging the URL. Tenant isolation remains a
+checks exact provider bytes and computes a test-only fingerprint without logging the URL. Tenant isolation remains a
 component-test claim in this one-tenant installation.
 
 The fake is testing-only. Its standalone binary checks the exact bearer configured

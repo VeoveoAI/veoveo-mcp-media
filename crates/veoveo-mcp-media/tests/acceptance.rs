@@ -801,10 +801,6 @@ async fn verify_output(
     );
     use sha2::Digest as _;
     let digest = Sha256Digest::from_bytes(sha2::Sha256::digest(&bytes).into());
-    ensure!(
-        record.sha256.as_ref() == Some(&digest),
-        "Artifact checksum differs from downloaded bytes"
-    );
     let view: PredictionView = read(client, &format!("media://prediction/{prediction}")).await?;
     ensure!(
         view.prediction.task_id == result.task_id

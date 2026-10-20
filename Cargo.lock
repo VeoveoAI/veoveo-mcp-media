@@ -4318,7 +4318,7 @@ dependencies = [
 [[package]]
 name = "veoveo-mcp-artifact"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=dbdccdba4da9d669e7cf221bb1f640ef93935118#dbdccdba4da9d669e7cf221bb1f640ef93935118"
+source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=b53d15e93891727169a1fe482b8fb664a9877730#b53d15e93891727169a1fe482b8fb664a9877730"
 dependencies = [
  "anyhow",
  "aws-sdk-s3",
@@ -4331,7 +4331,6 @@ dependencies = [
  "dotenvy",
  "futures",
  "getrandom 0.4.3",
- "hex",
  "reqwest",
  "rmcp",
  "rustls",

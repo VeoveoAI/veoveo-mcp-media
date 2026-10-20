@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- The open upload that reserves the artifact's bytes. Triggers add the reservation to\n-- the tenant's usage.\nINSERT INTO artifact.upload (\n    tenant, upload_id, artifact_id, creator, acting_identity, idempotency_key, form, state,\n    declared_size, declared_sha256, max_size, reserved_bytes, part_size, created_at, expires_at\n)\nVALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9, $10, $11, $12, $13, $14)\nRETURNING\n    upload_id AS \"upload_id: UploadId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    creator AS \"creator: StoredPrincipal\",\n    form AS \"form: UploadForm\",\n    state AS \"state: UploadState\",\n    declared_size,\n    declared_sha256,\n    max_size,\n    reserved_bytes,\n    object_upload,\n    part_size,\n    created_at,\n    expires_at,\n    ended_at\n",
+  "query": "-- One of a tenant's uploads, locked until the change that ends it commits.\nSELECT\n    upload_id AS \"upload_id: UploadId\",\n    artifact_id AS \"artifact_id: ArtifactId\",\n    creator AS \"creator: StoredPrincipal\",\n    form AS \"form: UploadForm\",\n    state AS \"state: UploadState\",\n    declared_size,\n    max_size,\n    reserved_bytes,\n    object_upload,\n    part_size,\n    created_at,\n    expires_at,\n    ended_at\nFROM artifact.upload\nWHERE tenant = $1 AND upload_id = $2\n\nFOR UPDATE\n",
   "describe": {
     "columns": [
       {
@@ -71,17 +71,6 @@
       },
       {
         "ordinal": 6,
-        "name": "declared_sha256",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "artifact.upload",
-            "name": "declared_sha256"
-          }
-        }
-      },
-      {
-        "ordinal": 7,
         "name": "max_size",
         "type_info": "Int8",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "reserved_bytes",
         "type_info": "Int8",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "object_upload",
         "type_info": "Text",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "part_size",
         "type_info": "Int8",
         "origin": {
@@ -125,7 +114,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -136,7 +125,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "expires_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -147,7 +136,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "ended_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -161,19 +150,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid",
-        "Uuid",
-        "Uuid",
-        "Text",
-        "Text",
-        "Text",
-        "Int8",
-        "Text",
-        "Int8",
-        "Int8",
-        "Int8",
-        "Timestamptz",
-        "Timestamptz"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -184,7 +161,6 @@
       false,
       true,
       true,
-      true,
       false,
       true,
       true,
@@ -193,5 +169,5 @@
       true
     ]
   },
-  "hash": "6b9968beed14fad08791e3518c34d564f8d3ac93af789fc6900948132b964015"
+  "hash": "88104a923b39dcb2a6247a795350c01c76449dd8629ed9d1f8fd2a20e3c6c9c6"
 }

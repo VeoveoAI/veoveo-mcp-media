@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- The artifact's bytes arrived. With a SHA-256 that object storage checked, the artifact\n-- is available and its retention starts; otherwise it is verifying until the server\n-- records the digest. Triggers add the size to the tenant's stored bytes.\nUPDATE artifact.artifact AS a\nSET size_bytes = $3,\n    sha256 = $4,\n    state = CASE WHEN $4::text IS NULL THEN 'verifying' ELSE 'available' END,\n    available_at = CASE WHEN $4::text IS NULL THEN NULL ELSE $5::timestamptz END,\n    retain_until = CASE\n        WHEN $4::text IS NOT NULL AND a.retention_days IS NOT NULL\n            THEN $5::timestamptz + make_interval(days => a.retention_days)\n    END\nWHERE a.tenant = $1 AND a.artifact_id = $2 AND a.state = 'uploading'\nRETURNING\n    a.artifact_id AS \"artifact_id: ArtifactId\",\n    a.owner_key,\n    a.work_context,\n    a.name,\n    a.media_type,\n    a.size_bytes,\n    a.sha256,\n    a.labels,\n    a.release_state AS \"release_state: ReleaseState\",\n    a.state AS \"state: ArtifactState\",\n    a.provenance AS \"provenance: Json<ArtifactProvenance>\",\n    a.metadata AS \"metadata: Json<ArtifactMetadataMap>\",\n    a.created_at,\n    a.available_at,\n    a.retain_until,\n    3::smallint AS \"level!: i16\"\n",
+  "query": "-- One artifact and the caller's level on it.\n-- Parameters $1 to $9 are the caller's facts for artifact.effective_level: tenant,\n-- principal, principal key, groups, their roles, Work Context, membership, labels and time.\nSELECT\n    a.artifact_id AS \"artifact_id: ArtifactId\",\n    a.owner_key,\n    a.work_context,\n    a.name,\n    a.media_type,\n    a.size_bytes,\n    a.labels,\n    a.release_state AS \"release_state: ReleaseState\",\n    a.state AS \"state: ArtifactState\",\n    a.provenance AS \"provenance: Json<ArtifactProvenance>\",\n    a.metadata AS \"metadata: Json<ArtifactMetadataMap>\",\n    a.created_at,\n    a.available_at,\n    a.retain_until,\n    artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7, $8, $9) AS \"level!: i16\"\nFROM artifact.artifact AS a\nWHERE a.tenant = $1 AND a.artifact_id = $10\n",
   "describe": {
     "columns": [
       {
@@ -71,17 +71,6 @@
       },
       {
         "ordinal": 6,
-        "name": "sha256",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "artifact.artifact",
-            "name": "sha256"
-          }
-        }
-      },
-      {
-        "ordinal": 7,
         "name": "labels",
         "type_info": "TextArray",
         "origin": {
@@ -92,7 +81,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 7,
         "name": "release_state: ReleaseState",
         "type_info": "Text",
         "origin": {
@@ -103,7 +92,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 8,
         "name": "state: ArtifactState",
         "type_info": "Text",
         "origin": {
@@ -114,7 +103,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "provenance: Json<ArtifactProvenance>",
         "type_info": "Jsonb",
         "origin": {
@@ -125,7 +114,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 10,
         "name": "metadata: Json<ArtifactMetadataMap>",
         "type_info": "Jsonb",
         "origin": {
@@ -136,7 +125,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -147,7 +136,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 12,
         "name": "available_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -158,7 +147,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 13,
         "name": "retain_until",
         "type_info": "Timestamptz",
         "origin": {
@@ -169,7 +158,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 14,
         "name": "level!: i16",
         "type_info": "Int2",
         "origin": "Expression"
@@ -179,9 +168,14 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "Int8",
         "Text",
-        "Timestamptz"
+        "TextArray",
+        "TextArray",
+        "Text",
+        "Text",
+        "TextArray",
+        "Timestamptz",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -190,7 +184,6 @@
       false,
       false,
       false,
-      true,
       true,
       false,
       false,
@@ -203,5 +196,5 @@
       null
     ]
   },
-  "hash": "c50bd90b7972a4ec26f788a4cc086d7088d9f245662eee190674bdcdbc9da0e9"
+  "hash": "d75c9160e727d608fd3067a5b8d0495a55a4cf44363be8664bd9781b20703d52"
 }

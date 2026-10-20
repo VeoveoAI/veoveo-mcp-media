@@ -28,7 +28,7 @@ use veoveo_mcp_artifact::{
         AUTHORIZATION as ARTIFACT_AUTHORIZATION, ArtifactApp, ArtifactMcp, ArtifactSubscriptions,
         TenantHubs, watch_changes as watch_artifact,
     },
-    service::{ArtifactService, run_verifications},
+    service::ArtifactService,
     share::ShareBase,
     store::ArtifactStore,
 };
@@ -196,7 +196,6 @@ pub async fn harness_with(
         output_max_bytes: 64 * 1024 * 1024,
         output_timeout: Duration::from_secs(60),
         output_hosts: BTreeSet::new(),
-        verification_timeout: Duration::from_secs(60),
         output_retention: None,
     };
     harness_for(provider, settings, None, granted).await
@@ -236,29 +235,11 @@ pub async fn harness_for(
         .declare_as_server(&artifact())
         .await
         .unwrap();
-    let artifact_tasks = TaskRuntime::new(
-        artifact_platform.clone(),
-        artifact(),
-        testing::deployment_id(),
-        Arc::new(
-            Instance::start(&artifact_platform, &artifact())
-                .await
-                .unwrap(),
-        ),
-    );
     let service = Arc::new(ArtifactService::new(
         ArtifactStore::new(artifact_platform.clone(), registry),
         storage,
-        artifact_tasks,
         ShareBase::parse("http://artifact.test:8801").unwrap(),
     ));
-    background.push(tokio::spawn({
-        let service = service.clone();
-        let stop = stop.clone();
-        async move {
-            let _ = run_verifications(service, stop).await;
-        }
-    }));
     let hubs = Arc::new(TenantHubs::default());
     background.push(tokio::spawn(watch_artifact(
         artifact_platform.clone(),
