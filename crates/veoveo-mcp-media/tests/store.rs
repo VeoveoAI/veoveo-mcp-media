@@ -115,6 +115,53 @@ async fn a_run_records_its_submission_and_outputs() {
 }
 
 #[tokio::test]
+async fn concurrent_recording_of_the_same_run_is_idempotent() {
+    with_store(|store| async move {
+        let acme = tenant("acme");
+        for _ in 0..32 {
+            let task = TaskId::new();
+            let now = Utc::now();
+            let outcomes = futures::future::join_all((0..16).map(|_| {
+                let store = store.clone();
+                async move { store.record_run(acme, task, &model(), now).await }
+            }))
+            .await;
+            for outcome in outcomes {
+                outcome.expect("concurrent creator/worker recording must be idempotent");
+            }
+            let row = store.run(acme, task).await.unwrap().unwrap();
+            assert_eq!(row.model_id().unwrap(), model());
+            assert_eq!(row.task_id(), task);
+        }
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn another_tenant_cannot_record_the_same_task() {
+    with_store(|store| async move {
+        let task = TaskId::new();
+        let now = Utc::now();
+        let acme = tenant("acme");
+        let globex = tenant("globex");
+        store.record_run(acme, task, &model(), now).await.unwrap();
+        assert!(store.record_run(globex, task, &model(), now).await.is_err());
+        assert!(store.run(globex, task).await.unwrap().is_none());
+        assert_eq!(
+            store
+                .run(acme, task)
+                .await
+                .unwrap()
+                .unwrap()
+                .model_id()
+                .unwrap(),
+            model()
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn a_repeated_prediction_is_a_conflict_and_reads_are_per_tenant() {
     with_store(|store| async move {
         let (acme, globex) = (tenant("acme"), tenant("globex"));

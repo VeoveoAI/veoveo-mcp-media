@@ -132,7 +132,7 @@ impl MediaStore {
         model: &MediaModelId,
         now: DateTime<Utc>,
     ) -> Result<(), MediaStoreError> {
-        sqlx::query_file!(
+        let inserted = sqlx::query_file!(
             "src/store/predictions/record_run.sql",
             tenant as StoredTenant,
             task_id.as_uuid(),
@@ -140,7 +140,16 @@ impl MediaStore {
             now,
         )
         .execute(self.pool())
-        .await?;
+        .await?
+        .rows_affected();
+        // Creator and worker can record the same run concurrently. All unique
+        // indexes must arbitrate that insert, while a foreign tenant's Task
+        // cannot turn the no-op into a successful recording for this tenant.
+        if inserted == 0 && self.run(tenant, task_id).await?.is_none() {
+            return Err(MediaStoreError::Corrupt(
+                "run Task belongs to another tenant",
+            ));
+        }
         Ok(())
     }
 
