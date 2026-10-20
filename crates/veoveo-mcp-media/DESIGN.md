@@ -34,7 +34,7 @@ port         8802
 | [JWT access tokens RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html) and [Token Exchange RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | The Hub forwards each request with an access token naming the caller. A run calls Artifact through the Hub with a token the SDK obtains by exchange for the run's Task, narrowed to Media's declared uses of Artifact that the caller holds. |
 | [HMAC-SHA256, RFC 2104](https://www.rfc-editor.org/rfc/rfc2104) | The provider signs each webhook over `{webhook-id}.{webhook-timestamp}.{body}` with the account's webhook secret; the `webhook-signature` header carries `v3,<hex>` signatures. Media refuses a signing time more than 300 seconds from its clock. |
 | [FOCUS 1.4](https://focus.finops.org/focus-specification/) usage records in core's [usage ledger](https://github.com/VeoveoAI/veoveo-core/blob/9a6b3ff95469ff19f9ccb513421a57ba6751aa9e/platform/usage/DESIGN.md) | One usage kind, `media.generation`, in the FOCUS service category "AI and Machine Learning" with the unit `Requests`, and amounts in [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) US dollars. |
-| [Veoveo server registration](https://github.com/VeoveoAI/veoveo-hub-sdk) | Media registers through RFC 7591, removes its registration through RFC 7592, and declares its permissions and its uses of Artifact in `ai.veoveo/authorization`. |
+| [Veoveo server registration](https://github.com/VeoveoAI/veoveo-hub-sdk) | Media initially registers through RFC 7591, resumes saved RFC7592 credentials on process restart, and declares its permissions and its uses of Artifact in `ai.veoveo/authorization`. |
 | [PostgreSQL 18](https://www.postgresql.org/docs/18/) | Server 18.6 through sqlx 0.9.0, under the [installation database design](https://github.com/VeoveoAI/veoveo-core/blob/9a6b3ff95469ff19f9ccb513421a57ba6751aa9e/docs/DATABASE.md) of `veoveo-core`. Media owns the schema `media`, applies its own migrations and runs every statement from a `.sql` file that sqlx checks. Row triggers publish changes on the `media` channel. |
 | The provider's HTTP API | The subset Media calls: the model registry, a price quote for a model and an input, a submission with an optional webhook, a prediction's status endpoint, a billing search and a prediction's deletion. Every response is wrapped in `{code, message, data}`. |
 
@@ -66,7 +66,26 @@ the registration's database login, applies its migrations, declares its usage ki
 serves MCP and the callback route. Beside them run the run worker on the SDK's
 `TaskWorker`, the catalog refresh, the change watcher and the sweep. SIGTERM stops
 claiming runs, lets running ones finish for up to 30 seconds and leaves the rest for
-another instance's recovery, then deletes the registration.
+another instance of the same deployment's recovery. Process shutdown preserves
+native registration; explicit retirement deletes it, and the Hub's existing orphan
+grace still applies.
+
+Required `VEOVEO_DEPLOYMENT_ID` (`--deployment-id`) is one trusted-allocated UUIDv7
+shared by registration, forwarded-token trust and the Task runtime. Keep it and the
+private key directory on ordinary restart. A new contract/build/endpoint has a new
+admitted deployment. Both serving and offline `--describe-registration` use native
+`KeyDirectory::prepare` with authorization derived from the typed routes. Describe
+requires only deployment ID, public-base URL and key directory, and exits before
+telemetry, provider, Hub or database initialization; it prints public ClientMetadata
+and creates/reuses the private worker key only.
+
+Serving uses `resume_or_register`, validating saved native ClientInformation against
+the exact metadata/key/Hub authority. Its private database grant is retained only for
+that same verified registration. Missing or expired registration requires fresh
+trusted scoped admission; no global initial credential fallback is used. Independent
+deployments cannot claim/recover each other's Core Tasks despite an explicitly shared
+logical domain schema. This does not qualify multi-deployment public provider callback
+routing; the current installation-routed callback path still needs a separate proof.
 
 ## MCP Surface
 

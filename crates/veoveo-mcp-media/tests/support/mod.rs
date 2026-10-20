@@ -239,6 +239,7 @@ pub async fn harness_for(
     let artifact_tasks = TaskRuntime::new(
         artifact_platform.clone(),
         artifact(),
+        testing::deployment_id(),
         Arc::new(
             Instance::start(&artifact_platform, &artifact())
                 .await
@@ -285,6 +286,7 @@ pub async fn harness_for(
     let routes = TaskRuntime::new(
         media_platform.clone(),
         media(),
+        testing::deployment_id(),
         Arc::new(Instance::start(&media_platform, &media()).await.unwrap()),
     );
     UsageLedger::new(&routes)
@@ -377,7 +379,7 @@ impl Harness {
     pub async fn start_worker(&mut self) {
         let platform: PlatformStore = self.db.server_store(&media()).await;
         let instance = Arc::new(Instance::start(&platform, &media()).await.unwrap());
-        let runtime = TaskRuntime::new(platform, media(), instance);
+        let runtime = TaskRuntime::new(platform, media(), testing::deployment_id(), instance);
         let mut worker = TaskWorker::new(runtime.clone())
             .calls(self.media_calls.clone())
             .usage(UsageLedger::new(&runtime))

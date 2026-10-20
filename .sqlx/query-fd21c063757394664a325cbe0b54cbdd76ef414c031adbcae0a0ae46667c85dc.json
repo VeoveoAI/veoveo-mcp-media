@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\n-- The owning worker records that its dispatch reached the provider, with the provider's\n-- job identifier when it has one. A checked operation schedules its first check.\nWITH parent AS (\n    SELECT id\n    FROM tasks.task\n    WHERE id = $1 AND server = $2 AND owner_instance = $3\n        AND status IN ('running', 'waiting', 'cancel_requested')\n    FOR SHARE\n)\nUPDATE tasks.task_operation AS o\nSET state = 'submitted',\n    external_id = $6,\n    submitted_at = now(),\n    next_check_at = CASE\n        WHEN o.completion = 'checks'\n            THEN least(now() + o.check_first_ms * interval '1 millisecond', o.deadline)\n    END\nFROM parent\nWHERE o.task_id = parent.id AND o.operation_key = $4 AND o.operation_id = $5\n    AND o.state = 'dispatching'\nRETURNING\n    o.task_id, o.operation_key, o.operation_id AS \"operation_id: StepOperationId\", o.provider,\n    o.external_id, o.state, o.completion, o.check_first_ms, o.check_interval_ms,\n    o.check_backoff, o.check_limit, o.checks_made, o.next_check_at, o.deadline, o.outcome,\n    o.dispatched_at, o.submitted_at, o.settled_at, o.unresolved_at, o.cancel_started_at,\n    o.cancel_receipt\n",
+  "query": "-- veoveo: all tenants (a runtime addresses only the operations of its deployment)\n-- One operation of this server's Task.\nSELECT\n    task_id, operation_key, operation_id AS \"operation_id: StepOperationId\", provider,\n    external_id, state, completion, check_first_ms, check_interval_ms, check_backoff,\n    check_limit, checks_made, next_check_at, deadline, outcome, dispatched_at, submitted_at,\n    settled_at, unresolved_at, cancel_started_at, cancel_receipt\nFROM tasks.task_operation AS operation\nWHERE task_id = $1 AND operation_key = $2 AND server = $3\n    AND EXISTS (SELECT 1 FROM tasks.task AS affinity WHERE affinity.id = operation.task_id AND affinity.deployment = $4)\n",
   "describe": {
     "columns": [
       {
@@ -239,10 +239,8 @@
       "Left": [
         "Uuid",
         "Text",
-        "Int4",
         "Text",
-        "Uuid",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -269,5 +267,5 @@
       true
     ]
   },
-  "hash": "5fd5f347cacd9fa884675b4ef874fbdbdb7249363b3ed9d28a1ce134112c3f3f"
+  "hash": "fd21c063757394664a325cbe0b54cbdd76ef414c031adbcae0a0ae46667c85dc"
 }

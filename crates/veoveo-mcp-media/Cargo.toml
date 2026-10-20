@@ -98,6 +98,7 @@ veoveo-store = { workspace = true, optional = true }
 veoveo-task = { workspace = true, optional = true }
 
 [dev-dependencies]
+tempfile.workspace = true
 veoveo-audit.workspace = true
 veoveo-audit-contract.workspace = true
 # Artifact in process: the store, object storage and hosted MCP the run tests store

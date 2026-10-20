@@ -1,7 +1,7 @@
 //! The hosted process: read the model catalog, register with the Hub, connect with
 //! the registration's database login, migrate, declare Media's usage kinds, then serve MCP
 //! and the provider's callback route while the run worker, the catalog refresh, the change
-//! watcher and the sweep run. Stopping deletes the registration.
+//! watcher and the sweep run. Process stop preserves native registration for resume.
 mod config;
 mod registration;
 
@@ -39,28 +39,37 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 pub async fn run() -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let _ = dotenvy::dotenv();
-    let _telemetry: TelemetryGuard =
-        init_server_telemetry("veoveo-mcp-media", "info,veoveo_mcp_media=debug")?;
     let args = Args::parse();
     let deployment = args.public_deployment()?;
-    let declaration = mcp::registration(&deployment)?;
+    let declaration = mcp::registration(&deployment, args.deployment_id)?;
     mcp::REGISTRATION
         .set(declaration.clone())
         .map_err(|_| anyhow::anyhow!("Media's registration was declared twice"))?;
     mcp::force_setup();
+    if args.describe_registration {
+        let metadata = registration::prepare(&args, declaration)?;
+        serde_json::to_writer_pretty(std::io::stdout().lock(), &metadata)?;
+        println!();
+        return Ok(());
+    }
+    let _telemetry: TelemetryGuard =
+        init_server_telemetry("veoveo-mcp-media", "info,veoveo_mcp_media=debug")?;
     let http = reqwest::Client::builder()
         .build()
         .context("building the provider HTTP client")?;
     let provider = ProviderClient::new(
         http.clone(),
-        args.provider_url.clone(),
-        args.provider_api_key.clone(),
+        args.provider_url
+            .clone()
+            .context("serving requires a provider URL")?,
+        args.provider_api_key
+            .clone()
+            .context("serving requires a provider key")?,
     )
     .context("configuring the provider")?;
     let registered = registration::register(&args, declaration).await?;
-    // The registration lasts while Media's login holds a live process instance. Once
-    // serving ends, on SIGTERM or Ctrl-C or on a failure, the client deletes it, which
-    // also drops the login.
+    // Process stop retains native resume credentials. Explicit retirement and the
+    // Hub's existing orphan grace remain separate from process shutdown.
     let Registered {
         client,
         registration,
@@ -90,7 +99,7 @@ pub async fn run() -> Result<()> {
         })
         .await;
     if let Err(error) = maintained {
-        tracing::warn!(%error, "Media could not remove its registration");
+        tracing::warn!(%error, "Media registration lifecycle failed");
     }
     served.context("Media's registration ended before serving finished")?
 }
@@ -122,6 +131,7 @@ async fn serve(
             grant.password.clone(),
         )?,
         crate::server(),
+        registration.access_tokens().deployment,
     )
     .await
     .context("connecting to the installation database")?;
@@ -192,7 +202,11 @@ async fn serve(
         // admits only events whose signature and callback token check out.
         .public_routes(operation_callbacks(
             runtime.clone(),
-            ProviderWebhooks::new(args.provider_webhook_secret.clone()),
+            ProviderWebhooks::new(
+                args.provider_webhook_secret
+                    .clone()
+                    .context("serving requires a provider webhook secret")?,
+            ),
         ))
         .build();
     // Serving ends on SIGTERM or Ctrl-C, or when Media can no longer claim its Tasks,

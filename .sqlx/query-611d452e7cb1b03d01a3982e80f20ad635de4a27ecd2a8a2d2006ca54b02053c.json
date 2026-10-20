@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- One operation of this server's Task.\nSELECT\n    task_id, operation_key, operation_id AS \"operation_id: StepOperationId\", provider,\n    external_id, state, completion, check_first_ms, check_interval_ms, check_backoff,\n    check_limit, checks_made, next_check_at, deadline, outcome, dispatched_at, submitted_at,\n    settled_at, unresolved_at, cancel_started_at, cancel_receipt\nFROM tasks.task_operation\nWHERE task_id = $1 AND operation_key = $2 AND server = $3\n",
+  "query": "-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\n-- The owning worker records one status check of a checked operation. A final result\n-- settles the operation; any other result schedules the next check with the operation's\n-- backoff, until its check limit or its deadline.\nWITH parent AS (\n    SELECT id\n    FROM tasks.task\n    WHERE id = $1 AND server = $2 AND deployment = $8 AND owner_instance = $3\n        AND status IN ('running', 'waiting', 'cancel_requested')\n    FOR SHARE\n),\nop AS (\n    SELECT o.task_id, o.operation_key, o.server, o.provider\n    FROM tasks.task_operation AS o\n    JOIN parent ON parent.id = o.task_id\n    WHERE o.operation_key = $4 AND o.completion = 'checks'\n        AND o.state IN ('dispatching', 'submitted')\n    FOR UPDATE OF o\n),\nevent AS (\n    INSERT INTO tasks.task_operation_event (\n        server, provider, event_id, task_id, operation_key, payload, final, applied\n    )\n    SELECT server, provider, $5, task_id, operation_key, $6, $7, $7 FROM op\n    ON CONFLICT (server, provider, event_id) DO NOTHING\n    RETURNING task_id, operation_key\n)\nUPDATE tasks.task_operation AS o\nSET checks_made = o.checks_made + 1,\n    state = CASE WHEN $7 THEN 'settled' ELSE o.state END,\n    outcome = CASE WHEN $7 THEN $6 END,\n    settled_at = CASE WHEN $7 THEN now() END,\n    next_check_at = CASE\n        WHEN $7 OR o.checks_made + 1 >= o.check_limit THEN NULL\n        ELSE least(\n            now() + make_interval(\n                secs => o.check_interval_ms * power(o.check_backoff, least(o.checks_made, 64))\n                    / 1000.0\n            ),\n            o.deadline\n        )\n    END\nFROM event\nWHERE o.task_id = event.task_id AND o.operation_key = event.operation_key\nRETURNING\n    o.task_id, o.operation_key, o.operation_id AS \"operation_id: StepOperationId\", o.provider,\n    o.external_id, o.state, o.completion, o.check_first_ms, o.check_interval_ms,\n    o.check_backoff, o.check_limit, o.checks_made, o.next_check_at, o.deadline, o.outcome,\n    o.dispatched_at, o.submitted_at, o.settled_at, o.unresolved_at, o.cancel_started_at,\n    o.cancel_receipt\n",
   "describe": {
     "columns": [
       {
@@ -239,7 +239,12 @@
       "Left": [
         "Uuid",
         "Text",
-        "Text"
+        "Int4",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Bool",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -266,5 +271,5 @@
       true
     ]
   },
-  "hash": "5304c08c03d811c4680f42b1e2e4bb234c61ec354edef5273b579acac85c066f"
+  "hash": "611d452e7cb1b03d01a3982e80f20ad635de4a27ecd2a8a2d2006ca54b02053c"
 }

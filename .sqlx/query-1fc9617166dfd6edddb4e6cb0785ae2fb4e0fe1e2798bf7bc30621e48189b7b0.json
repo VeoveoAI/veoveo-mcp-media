@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- veoveo: unbounded (a Task holds at most 64 input requests, which tasks.task_input_limit enforces)\n-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\nSELECT input.request_key, input.kind, input.params, input.response, input.created_at,\n    input.responded_at\nFROM tasks.task_input AS input\nJOIN tasks.task AS task ON task.id = input.task_id\nWHERE task.id = $1 AND task.server = $2 AND input.response IS NULL\nORDER BY input.created_at, input.request_key\n",
+  "query": "-- veoveo: unbounded (a Task holds at most 64 input requests, which tasks.task_input_limit enforces)\n-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\nSELECT input.request_key, input.kind, input.params, input.response, input.created_at,\n    input.responded_at\nFROM tasks.task_input AS input\nJOIN tasks.task AS task ON task.id = input.task_id\nWHERE task.id = $1 AND task.server = $2 AND task.deployment = $3 AND input.response IS NULL\nORDER BY input.created_at, input.request_key\n",
   "describe": {
     "columns": [
       {
@@ -73,7 +73,8 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Text"
+        "Text",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -85,5 +86,5 @@
       true
     ]
   },
-  "hash": "d808edfa54fdea04bb7307b2959e6b10d9d0bafd579b604d5f9317682db7e989"
+  "hash": "1fc9617166dfd6edddb4e6cb0785ae2fb4e0fe1e2798bf7bc30621e48189b7b0"
 }

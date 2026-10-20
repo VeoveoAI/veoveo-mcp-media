@@ -354,6 +354,7 @@ fn forwarded_user() -> veoveo_hub_sdk::HubInternalIdentity {
     let authority = testing::authority();
     let now = Utc::now();
     let context = HubRequestContext {
+        execution: testing::execution_context(),
         audit: veoveo_audit_contract::AuditRequest::background(),
         access_token: AccessTokenSubject {
             issuer: principal.issuer.clone(),
@@ -379,6 +380,8 @@ fn forwarded_user() -> veoveo_hub_sdk::HubInternalIdentity {
     )
     .unwrap()
     .issue(ForwardedRequest {
+        delegation_context: None,
+        deployment: testing::deployment_id(),
         profile: HubProfileId::parse(MESH_PROFILE).unwrap(),
         server: veoveo_mcp_media::server(),
         audience: ResourceIndicator::parse(testing::TEST_RESOURCE).unwrap(),

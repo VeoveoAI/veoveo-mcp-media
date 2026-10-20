@@ -274,3 +274,25 @@ path separately; there is no automatic switch from webhook to status checks.
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+## Deployment Admission And Offline Description
+
+`VEOVEO_DEPLOYMENT_ID` (`--deployment-id`) is required and stable across ordinary
+process restarts. Registration, verifier and Task runtime share it. New
+build/contract/endpoint identity is separately admitted, retaining old workers for
+retained work instead of rebinding an existing deployment.
+
+```sh
+veoveo-mcp-media --describe-registration \
+  --deployment-id <allocated-uuidv7> \
+  --public-base-url https://candidate.example \
+  --key-directory /sandbox/builds/<build-id>/keys
+```
+
+The command prints native public metadata and creates/reuses the private worker key;
+it needs no provider/Hub/admission credentials and makes no network or database calls.
+Serving derives identical metadata, then uses native saved registration via
+`resume_or_register`. Process stop is separate from retirement; existing Hub orphan
+grace remains. Missing/expired registration needs fresh trusted scoped admission,
+never global-bootstrap fallback. Deployment-aware MCP/Task identity does not itself
+prove deployment-specific public callback routing.

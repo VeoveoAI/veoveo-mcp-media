@@ -16,10 +16,14 @@ pub static REGISTRATION: OnceLock<RegistrationDeclaration> = OnceLock::new();
 
 /// Media's identity and the URL where the Hub reaches its MCP endpoint:
 /// `{public_base_url}/media/mcp`.
-pub fn registration(deployment: &PublicDeployment) -> anyhow::Result<RegistrationDeclaration> {
+pub fn registration(
+    deployment: &PublicDeployment,
+    deployment_id: veoveo_hub_sdk::DeploymentId,
+) -> anyhow::Result<RegistrationDeclaration> {
     let endpoint = deployment.server(crate::server().as_str())?;
     let url = url::Url::parse(&format!("{}/mcp", endpoint.public_url()))?;
     Ok(RegistrationDeclaration {
+        deployment: deployment_id,
         slug: crate::server(),
         uri_scheme: MediaContract::scheme(),
         version: ServerVersion::new(env!("CARGO_PKG_VERSION"))?,
@@ -34,7 +38,11 @@ mod tests {
     #[test]
     fn the_registered_endpoint_is_the_mounted_mcp_url() {
         let deployment = PublicDeployment::new("http://vv-mcp-media.internal:8802").unwrap();
-        let registration = registration(&deployment).unwrap();
+        let registration = registration(
+            &deployment,
+            veoveo_hub_sdk::hosting::testing::deployment_id(),
+        )
+        .unwrap();
         assert_eq!(
             registration.endpoint.url().as_str(),
             "http://vv-mcp-media.internal:8802/media/mcp"

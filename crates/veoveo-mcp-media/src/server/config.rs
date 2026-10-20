@@ -15,6 +15,11 @@ use crate::run::{RunCompletion, RunSettings};
 #[derive(Parser)]
 #[command(name = "veoveo-mcp-media", about = "Media MCP server")]
 pub(super) struct Args {
+    /// Emit native public metadata only, without provider/Hub/database initialization.
+    #[arg(long)]
+    pub describe_registration: bool,
+    #[arg(long, env = "VEOVEO_DEPLOYMENT_ID")]
+    pub deployment_id: veoveo_hub_sdk::DeploymentId,
     #[arg(long, env = "VEOVEO_PORT", default_value_t = 8802)]
     pub port: u16,
     /// The origin where the Hub reaches Media; Media serves MCP at
@@ -30,17 +35,22 @@ pub(super) struct Args {
     #[arg(long, env = "VEOVEO_PUBLIC_ORIGIN")]
     pub public_origin: Option<PublicOrigin>,
     /// The Hub's RFC 8414 issuer; registration discovers its endpoint from there.
-    #[arg(long, env = "VEOVEO_HUB_ISSUER")]
-    pub hub_issuer: Url,
+    #[arg(
+        long,
+        env = "VEOVEO_HUB_ISSUER",
+        required_unless_present = "describe_registration"
+    )]
+    pub hub_issuer: Option<Url>,
     /// The installation's registration secret or native opaque initial-access reference.
     #[arg(
         long,
         env = "VEOVEO_REGISTRATION_SECRET",
+        required_unless_present = "describe_registration",
         hide_env_values = true,
         value_parser = parse_secret
     )]
-    pub registration_secret: SecretString,
-    /// Holds Media's registration key, which keeps its namespace across restarts.
+    pub registration_secret: Option<SecretString>,
+    /// Private deployment key and native saved registration retained across process restarts.
     #[arg(
         long,
         env = "VEOVEO_KEY_DIRECTORY",
@@ -49,24 +59,30 @@ pub(super) struct Args {
     pub key_directory: PathBuf,
     /// The generation provider's API origin. No default: tests and the local
     /// installation name the fake provider.
-    #[arg(long, env = "MEDIA_PROVIDER_URL")]
-    pub provider_url: Url,
+    #[arg(
+        long,
+        env = "MEDIA_PROVIDER_URL",
+        required_unless_present = "describe_registration"
+    )]
+    pub provider_url: Option<Url>,
     /// The provider's API key.
     #[arg(
         long,
         env = "MEDIA_PROVIDER_API_KEY",
+        required_unless_present = "describe_registration",
         hide_env_values = true,
         value_parser = parse_secret
     )]
-    pub provider_api_key: SecretString,
+    pub provider_api_key: Option<SecretString>,
     /// The secret the provider signs its webhooks with.
     #[arg(
         long,
         env = "MEDIA_PROVIDER_WEBHOOK_SECRET",
+        required_unless_present = "describe_registration",
         hide_env_values = true,
         value_parser = parse_secret
     )]
-    pub provider_webhook_secret: SecretString,
+    pub provider_webhook_secret: Option<SecretString>,
     /// The hosts outputs may be fetched from, as `host` or `host:port`. Empty admits the
     /// provider's own host only.
     #[arg(
@@ -155,6 +171,8 @@ mod tests {
     fn args(extra: &[&str]) -> Result<Args, clap::Error> {
         let mut argv = vec![
             "veoveo-mcp-media",
+            "--deployment-id",
+            "019a5b30-0000-7000-8000-000000000001",
             "--public-base-url",
             "http://vv-mcp-media.internal:8802",
             "--hub-issuer",
@@ -174,7 +192,10 @@ mod tests {
     fn the_provider_address_is_required() {
         assert!(args(&[]).is_err());
         let args = args(&["--provider-url", "http://127.0.0.1:8803"]).unwrap();
-        assert_eq!(args.provider_url.as_str(), "http://127.0.0.1:8803/");
+        assert_eq!(
+            args.provider_url.as_ref().unwrap().as_str(),
+            "http://127.0.0.1:8803/"
+        );
         let settings = args
             .run_settings(&args.public_deployment().unwrap())
             .unwrap();
@@ -235,5 +256,23 @@ mod tests {
             settings.output_hosts,
             BTreeSet::from(["cdn.example".to_owned(), "other.example:8443".to_owned()])
         );
+    }
+    #[test]
+    fn offline_description_needs_no_provider_or_registration_credentials() {
+        let args = Args::try_parse_from([
+            "veoveo-mcp-media",
+            "--describe-registration",
+            "--deployment-id",
+            "019a5b30-0000-7000-8000-000000000001",
+            "--public-base-url",
+            "https://media.example",
+        ])
+        .unwrap();
+        assert!(args.describe_registration);
+        assert!(args.hub_issuer.is_none());
+        assert!(args.registration_secret.is_none());
+        assert!(args.provider_url.is_none());
+        assert!(args.provider_api_key.is_none());
+        assert!(args.provider_webhook_secret.is_none());
     }
 }

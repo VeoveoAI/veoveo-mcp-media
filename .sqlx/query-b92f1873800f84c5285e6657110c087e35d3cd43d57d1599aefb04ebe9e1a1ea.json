@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- $1–$8 select the caller's Tasks as in `get.sql`; $9 lists the watched Task IDs.\nSELECT\n    id,\n    server,\n    tenant,\n    owner_tenant,\n    owner_principal,\n    owner_kind AS \"owner_kind: PrincipalKind\",\n    owner_issuer,\n    owner_subject,\n    surface,\n    data_labels,\n    work_context,\n    authority AS \"authority: Json<InvocationAuthority>\",\n    task_type,\n    recovery_class AS \"recovery_class: RecoveryClass\",\n    input,\n    idempotency_key,\n    ttl_ms,\n    poll_interval_ms,\n    status AS \"status: TaskStatus\",\n    status_message,\n    progress,\n    result,\n    result_uri,\n    error_code,\n    error_message,\n    error_details,\n    owner_instance AS \"owner_instance: InstanceId\",\n    revision,\n    retention_pins,\n    created_at,\n    updated_at,\n    started_at,\n    cancel_requested_at,\n    completed_at,\n    retention_expires_at\nFROM tasks.task\nWHERE server = $1\n    AND tenant = $2\n    AND owner_principal = $3\n    AND surface = $4\n    AND owner_tenant IS NOT DISTINCT FROM $5\n    AND data_labels <@ $6\n    AND ($7::text[] IS NULL OR task_type = ANY ($7))\n    AND ($8::text IS NULL OR work_context = $8)\n    AND id = ANY ($9::uuid[])\nORDER BY created_at, id\n",
+  "query": "-- $1–$8 select the caller's Tasks as in `get.sql`. $9 and $10 are the creation time and\n-- ID of the previous page's last Task, and $11 limits the page. The first page's bound\n-- precedes every Task, so the keyset stays an index range in a generic plan.\nSELECT\n    id,\n    server,\n    deployment,\n    tenant,\n    owner_tenant,\n    owner_principal,\n    owner_kind AS \"owner_kind: PrincipalKind\",\n    owner_issuer,\n    owner_subject,\n    surface,\n    data_labels,\n    work_context,\n    authority AS \"authority: Json<InvocationAuthority>\",\n    task_type,\n    recovery_class AS \"recovery_class: RecoveryClass\",\n    input,\n    idempotency_key,\n    ttl_ms,\n    poll_interval_ms,\n    status AS \"status: TaskStatus\",\n    status_message,\n    progress,\n    result,\n    result_uri,\n    error_code,\n    error_message,\n    error_details,\n    owner_instance AS \"owner_instance: InstanceId\",\n    revision,\n    retention_pins,\n    created_at,\n    updated_at,\n    started_at,\n    cancel_requested_at,\n    completed_at,\n    retention_expires_at\nFROM tasks.task\nWHERE server = $1 AND deployment = $12\n    AND tenant = $2\n    AND owner_principal = $3\n    AND surface = $4\n    AND owner_tenant IS NOT DISTINCT FROM $5\n    AND data_labels <@ $6\n    AND ($7::text[] IS NULL OR task_type = ANY ($7))\n    AND ($8::text IS NULL OR work_context = $8)\n    AND (created_at, id) > (\n        coalesce($9::timestamptz, '-infinity'),\n        coalesce($10::uuid, '00000000-0000-0000-0000-000000000000')\n    )\nORDER BY created_at, id\nLIMIT $11\n",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "deployment",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "deployment"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "tenant",
         "type_info": "Text",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "owner_tenant",
         "type_info": "Text",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "owner_principal",
         "type_info": "Text",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "owner_kind: PrincipalKind",
         "type_info": "Text",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "owner_issuer",
         "type_info": "Text",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "owner_subject",
         "type_info": "Text",
         "origin": {
@@ -92,7 +103,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "surface",
         "type_info": "Text",
         "origin": {
@@ -103,7 +114,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "data_labels",
         "type_info": "TextArray",
         "origin": {
@@ -114,7 +125,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "work_context",
         "type_info": "Text",
         "origin": {
@@ -125,7 +136,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "authority: Json<InvocationAuthority>",
         "type_info": "Jsonb",
         "origin": {
@@ -136,7 +147,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "task_type",
         "type_info": "Text",
         "origin": {
@@ -147,7 +158,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "recovery_class: RecoveryClass",
         "type_info": "Text",
         "origin": {
@@ -158,7 +169,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "input",
         "type_info": "Jsonb",
         "origin": {
@@ -169,7 +180,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "idempotency_key",
         "type_info": "Text",
         "origin": {
@@ -180,7 +191,7 @@
         }
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "ttl_ms",
         "type_info": "Int8",
         "origin": {
@@ -191,7 +202,7 @@
         }
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "poll_interval_ms",
         "type_info": "Int8",
         "origin": {
@@ -202,7 +213,7 @@
         }
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "status: TaskStatus",
         "type_info": "Text",
         "origin": {
@@ -213,7 +224,7 @@
         }
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "status_message",
         "type_info": "Text",
         "origin": {
@@ -224,7 +235,7 @@
         }
       },
       {
-        "ordinal": 20,
+        "ordinal": 21,
         "name": "progress",
         "type_info": "Float8",
         "origin": {
@@ -235,7 +246,7 @@
         }
       },
       {
-        "ordinal": 21,
+        "ordinal": 22,
         "name": "result",
         "type_info": "Jsonb",
         "origin": {
@@ -246,7 +257,7 @@
         }
       },
       {
-        "ordinal": 22,
+        "ordinal": 23,
         "name": "result_uri",
         "type_info": "Text",
         "origin": {
@@ -257,7 +268,7 @@
         }
       },
       {
-        "ordinal": 23,
+        "ordinal": 24,
         "name": "error_code",
         "type_info": "Text",
         "origin": {
@@ -268,7 +279,7 @@
         }
       },
       {
-        "ordinal": 24,
+        "ordinal": 25,
         "name": "error_message",
         "type_info": "Text",
         "origin": {
@@ -279,7 +290,7 @@
         }
       },
       {
-        "ordinal": 25,
+        "ordinal": 26,
         "name": "error_details",
         "type_info": "Jsonb",
         "origin": {
@@ -290,7 +301,7 @@
         }
       },
       {
-        "ordinal": 26,
+        "ordinal": 27,
         "name": "owner_instance: InstanceId",
         "type_info": "Int4",
         "origin": {
@@ -301,7 +312,7 @@
         }
       },
       {
-        "ordinal": 27,
+        "ordinal": 28,
         "name": "revision",
         "type_info": "Int8",
         "origin": {
@@ -312,7 +323,7 @@
         }
       },
       {
-        "ordinal": 28,
+        "ordinal": 29,
         "name": "retention_pins",
         "type_info": "TextArray",
         "origin": {
@@ -323,7 +334,7 @@
         }
       },
       {
-        "ordinal": 29,
+        "ordinal": 30,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -334,7 +345,7 @@
         }
       },
       {
-        "ordinal": 30,
+        "ordinal": 31,
         "name": "updated_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -345,7 +356,7 @@
         }
       },
       {
-        "ordinal": 31,
+        "ordinal": 32,
         "name": "started_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -356,7 +367,7 @@
         }
       },
       {
-        "ordinal": 32,
+        "ordinal": 33,
         "name": "cancel_requested_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -367,7 +378,7 @@
         }
       },
       {
-        "ordinal": 33,
+        "ordinal": 34,
         "name": "completed_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -378,7 +389,7 @@
         }
       },
       {
-        "ordinal": 34,
+        "ordinal": 35,
         "name": "retention_expires_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -399,10 +410,14 @@
         "TextArray",
         "TextArray",
         "Text",
-        "UuidArray"
+        "Timestamptz",
+        "Uuid",
+        "Int8",
+        "Uuid"
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -440,5 +455,5 @@
       true
     ]
   },
-  "hash": "3c90bb0c6c082e459f516231df8f520148f2d1a600892bf21faad6a49894657b"
+  "hash": "b92f1873800f84c5285e6657110c087e35d3cd43d57d1599aefb04ebe9e1a1ea"
 }
