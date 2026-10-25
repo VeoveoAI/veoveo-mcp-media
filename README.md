@@ -95,8 +95,8 @@ docker build --target fake-provider -t veoveo-mcp-media:fake-provider .
 Native Media uses the qualified transport and private placement below. The
 expanded lifecycle probes require separate deployed evidence; source and component
 checks alone do not qualify them. Follow the installation-owned setup and policies in
-[veoveo-template-installation](../veoveo-template-installation/openshell/MEDIA.md)
-and the [Media execution plan](../veoveo-docs/OPENSHELL_HARDCUT_PLAN.md#media-native-integration-plan).
+[veoveo-template-installation](https://github.com/VeoveoAI/veoveo-template-installation/blob/main/openshell/MEDIA.md)
+and the [Media execution record](https://github.com/VeoveoAI/veoveo-docs/blob/main/records/OPENSHELL_HARDCUT_PLAN.md#media-native-integration-plan).
 Endpoint, provider and placement configuration belongs to that trusted
 installation, retaining the caller's existing Work Context.
 
