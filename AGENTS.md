@@ -69,7 +69,12 @@ These rules apply to veoveo-mcp-media. The crate's own rules are in
   a task runner or shell scripts that hold test logic.
 - Pin exact versions and image digests. When changing a pin, verify the latest stable
   release at its source.
-- Run `docker build --target check .` on macOS and on Linux before pushing.
+- Run `docker build --target check .` on macOS and on Linux before pushing. The `check`,
+  `build` and `fake-provider-build` stages keep Cargo's registry, its Git checkouts and
+  the workspace `target/` in BuildKit cache mounts, so consecutive checks reuse compiled
+  crates. These caches live only in the build host's BuildKit, are built by the operator
+  from our own repositories, and are never used by factory builds, which share no
+  writable cache.
 - Names, identifiers and formats follow the
   [naming and format conventions](https://github.com/VeoveoAI/veoveo-core/blob/main/docs/CONVENTIONS.md),
   and MCP names follow the SDK's
