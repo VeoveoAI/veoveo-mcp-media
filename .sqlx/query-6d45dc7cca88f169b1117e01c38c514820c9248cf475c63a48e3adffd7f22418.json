@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a server's workers address the Tasks they run by ID, whichever tenant owns them)\n-- The owning worker parks its Task on a pending operation: the Task waits without an\n-- owner until an event, a due check or the deadline queues it. The operation's row is\n-- locked first, so a delivery or deadline that settles it either commits before and the\n-- Task is not parked, or waits for this park to commit and then wakes the parked Task in\n-- its transaction's next statement, operation_wake.sql, which sees this commit.\nWITH pending AS (\n    SELECT task_id\n    FROM tasks.task_operation\n    WHERE task_id = $1 AND operation_key = $4 AND server = $2\n        AND state IN ('dispatching', 'submitted')\n        AND (next_check_at IS NULL OR next_check_at > now())\n    FOR UPDATE\n)\nUPDATE tasks.task AS task\nSET status = 'waiting', status_message = $5, owner_instance = NULL, parked_on = $4\nFROM pending\nWHERE task.id = pending.task_id AND task.server = $2 AND task.deployment = $6 AND task.owner_instance = $3\n    AND task.status IN ('running', 'waiting')\nRETURNING task.id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks.task",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6d45dc7cca88f169b1117e01c38c514820c9248cf475c63a48e3adffd7f22418"
+}

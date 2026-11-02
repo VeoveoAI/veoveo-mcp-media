@@ -28,6 +28,7 @@ pub fn registration(
         uri_scheme: MediaContract::scheme(),
         version: ServerVersion::new(env!("CARGO_PKG_VERSION"))?,
         endpoint: ServerEndpoint::new(url)?,
+        surfaces: <super::MediaMcp as veoveo_hub_sdk::hosting::DomainServer>::routes().surfaces(),
     })
 }
 

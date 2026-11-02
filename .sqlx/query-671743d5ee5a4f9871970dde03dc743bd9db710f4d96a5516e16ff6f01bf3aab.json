@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Mark up to $2 of server $1's pending operations whose deadline passed as unresolved,\n-- earliest first, and return them for operation_wake.sql, the transaction's next\n-- statement, which queues each Task parked on one. An unresolved operation still settles\n-- when a final event arrives later.\nWITH due AS (\n    SELECT task_id, operation_key\n    FROM tasks.task_operation\n    WHERE server = $1 AND deadline <= now() AND state IN ('dispatching', 'submitted')\n    ORDER BY deadline\n    LIMIT $2\n    FOR UPDATE SKIP LOCKED\n),\nunresolved AS (\n    UPDATE tasks.task_operation AS o\n    SET state = 'unresolved', unresolved_at = now(), next_check_at = NULL\n    FROM due\n    WHERE o.task_id = due.task_id AND o.operation_key = due.operation_key\n    RETURNING o.task_id, o.operation_key\n)\nSELECT task_id, operation_key FROM unresolved\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "task_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "operation_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks.task_operation",
+            "name": "operation_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "671743d5ee5a4f9871970dde03dc743bd9db710f4d96a5516e16ff6f01bf3aab"
+}

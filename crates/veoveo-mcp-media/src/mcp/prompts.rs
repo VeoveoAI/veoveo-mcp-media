@@ -1,6 +1,6 @@
-//! Media's prompts: guidance for choosing a model and drafting a run, and for reviewing a
-//! finished run. They read through resources and act through tools, so a prompt grants
-//! nothing itself. Ported from the monorepo's Media server at 0c33cf8a7.
+//! Media's prompts: choosing a model and drafting a run, and reviewing a finished run.
+//! Each states its task and names the skill that says how, so a prompt grants nothing
+//! itself.
 use rmcp::{
     ErrorData as McpError,
     model::{GetPromptResult, JsonObject, Prompt, PromptArgument, PromptMessage, Role},
@@ -130,12 +130,9 @@ impl MediaPrompt {
             Self::ModelSelect => {
                 let args: ModelSelectArgs = parse(self.name(), arguments)?;
                 format!(
-                    "Prepare a media model selection for this goal:\n\n\
-                     Goal: {}\nMedia type: {}\nBudget guidance: {}\n\n\
-                     Read media://models, choose the best candidate models, then read \
-                     media://model/{{+model_id}} for each candidate before drafting run \
-                     arguments. Return the selected model and a JSON input object that \
-                     satisfies its schema exactly.",
+                    "Choose a model and draft its run input for this goal, as the skill \
+                     skill://media/generate-media/SKILL.md says, without starting the run:\n\n\
+                     Goal: {}\nMedia type: {}\nBudget guidance: {}",
                     args.goal,
                     args.media_type.as_deref().unwrap_or("not specified"),
                     args.budget.as_deref().unwrap_or("not specified"),
@@ -144,11 +141,10 @@ impl MediaPrompt {
             Self::ImageEdit => {
                 let args: ImageEditArgs = parse(self.name(), arguments)?;
                 format!(
-                    "Draft an image edit run.\n\n\
-                     Source image URL: {}\nEdit goal: {}\nConstraints: {}\n\n\
-                     Read media://models and prefer an image edit or image-to-image model. \
-                     Then read media://model/{{+model_id}} and return only the model plus an \
-                     input object that satisfies its schema.",
+                    "Draft an image edit run with an image edit or image-to-image model, as \
+                     the skill skill://media/generate-media/SKILL.md says, without starting \
+                     it:\n\n\
+                     Source image URL: {}\nEdit goal: {}\nConstraints: {}",
                     args.image_url,
                     args.edit_goal,
                     args.constraints.as_deref().unwrap_or("not specified"),
@@ -157,11 +153,9 @@ impl MediaPrompt {
             Self::VideoGenerate => {
                 let args: VideoArgs = parse(self.name(), arguments)?;
                 format!(
-                    "Draft a video generation run.\n\n\
-                     Brief: {}\nReference URL: {}\nDuration guidance: {}\n\n\
-                     Read media://models and choose a video model. Then read \
-                     media://model/{{+model_id}} and return only the model plus an input \
-                     object that satisfies its schema.",
+                    "Draft a video generation run with a video model, as the skill \
+                     skill://media/generate-media/SKILL.md says, without starting it:\n\n\
+                     Brief: {}\nReference URL: {}\nDuration guidance: {}",
                     args.brief,
                     args.reference_url.as_deref().unwrap_or("not specified"),
                     args.duration.as_deref().unwrap_or("not specified"),
@@ -170,12 +164,7 @@ impl MediaPrompt {
             Self::TaskReview => {
                 let args: TaskReviewArgs = parse(self.name(), arguments)?;
                 format!(
-                    "Review Media run {}.\n\n\
-                     Read tasks/get for its status and result. The result names \
-                     media://prediction/{{prediction_id}}/result and the Artifact address of \
-                     each output, and the Task's `ai.veoveo/usage` metadata holds its \
-                     estimated and actual cost. Summarize the outputs, their types and the \
-                     final cost, and say when no actual cost was recorded.",
+                    "Review Media run {} as the skill skill://media/review-a-run/SKILL.md says.",
                     args.task_id,
                 )
             }
@@ -220,6 +209,6 @@ mod tests {
             .unwrap();
         let text = serde_json::to_string(&review).unwrap();
         assert!(text.contains(&task.to_string()));
-        assert!(text.contains("ai.veoveo/usage"));
+        assert!(text.contains("skill://media/review-a-run/SKILL.md"));
     }
 }

@@ -51,7 +51,7 @@ use veoveo_mcp_media::{
         FakeObservation, IMAGE_BYTES, IMAGE_MODEL, LARGE_BYTES, LARGE_MODEL, PRICE_USD, output_byte,
     },
 };
-use veoveo_types::{PrincipalId, Sha256Digest, WorkContextId};
+use veoveo_types::{PrincipalId, Sha256Digest};
 
 #[derive(Clone, Copy)]
 enum CallerRole {
@@ -734,9 +734,6 @@ async fn verify_output(
         std::env::var("VEOVEO_ACCEPTANCE_BILLED_PRINCIPAL")
             .context("VEOVEO_ACCEPTANCE_BILLED_PRINCIPAL names the admitted billed caller")?,
     )?;
-    let context = WorkContextId::parse(
-        std::env::var("VEOVEO_ACCEPTANCE_WORK_CONTEXT").unwrap_or_else(|_| "local".into()),
-    )?;
     let labels: ArtifactLabels = serde_json::from_str(
         &std::env::var("VEOVEO_ACCEPTANCE_LABELS").unwrap_or_else(|_| "[]".into()),
     )?;
@@ -744,7 +741,6 @@ async fn verify_output(
     ensure!(
         record.owner == owner
             && record.provenance.caller == owner
-            && record.work_context == context
             && record.labels == labels
             && record
                 .provenance

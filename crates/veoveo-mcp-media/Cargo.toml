@@ -57,6 +57,7 @@ server = [
     "dep:uuid",
     "dep:veoveo-mcp-artifact",
     "veoveo-mcp-artifact/client",
+    "dep:veoveo-skills",
     "dep:veoveo-store",
     "dep:veoveo-task",
 ]
@@ -64,7 +65,12 @@ server = [
 # installation run, so nothing reaches the real one.
 testing = ["server"]
 
+[build-dependencies]
+# Embeds the skills under skills/ at build time.
+veoveo-skills = { workspace = true, features = ["build"] }
+
 [dependencies]
+veoveo-skills = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }

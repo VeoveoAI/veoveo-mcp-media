@@ -28,7 +28,8 @@ port         8802
 
 | Standard or protocol | Implemented profile |
 |---|---|
-| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-hub-sdk` 9bf0a3a implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen` and typed structured content. |
+| [Model Context Protocol](https://modelcontextprotocol.io/specification/) | Version `2026-07-28`, JSON-RPC 2.0 over Streamable HTTP, under the hosted MCP contract `https://veoveo.ai/contracts/hosted-mcp` that `veoveo-hub-sdk` 9bf0a3a implements. The server exposes tools, `run` as a Task through the Tasks extension, resources and templates, prompts, completions of model identities, `subscriptions/listen`, typed structured content and skills. |
+| [MCP Skills extension](https://github.com/modelcontextprotocol/ext-skills) `io.modelcontextprotocol/skills`, SEP-2640, and the [Agent Skills](https://agentskills.io/specification) format | The skills under `skills/`, embedded at build time and served at `skill://media/{name}/{path}` through the SDK; see [Skills](#skills) |
 | [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12/) | Tool inputs and results and resource contents. A run's input is checked with jsonschema 0.58.6 against the JSON Schema the provider publishes for the model; that schema's shape is the provider's. |
 | [URI Template RFC 6570](https://www.rfc-editor.org/rfc/rfc6570) | Discovery declares simple variables, one `{+model_id}` reserved expansion for a model's `/`-separated components, and collection pages that continue through a `cursor` query parameter. |
 | [JWT access tokens RFC 9068](https://www.rfc-editor.org/rfc/rfc9068.html) and [Token Exchange RFC 8693](https://www.rfc-editor.org/rfc/rfc8693.html) | The Hub forwards each request with an access token naming the caller. A run calls Artifact through the Hub with a token the SDK obtains by exchange for the run's Task, narrowed to Media's declared uses of Artifact that the caller holds. |
@@ -142,10 +143,24 @@ A run changes when its Task does, which core's Task runtime announces on Media's
 channel, or when its row does, which Media's own trigger announces on the `media`
 channel; the watcher listens to both.
 
+### Skills
+
+How an agent uses Media is in its skills, which a host loads when a task needs one. The
+server's `instructions` say what it is and name each skill's address, and the skill text
+names the tools as callers see them through the Hub, `media__{tool}`:
+
+| Skill | Guidance |
+|---|---|
+| `generate-media` | choosing a model from `models`, reading its schema with `model_schema`, drafting an input that satisfies it, `run` as a Task, and its outputs as the person's artifacts, with Artifact's skills for fetching and sharing them |
+| `review-a-run` | a finished run's status, outputs and estimated and actual cost |
+
+Each skill file is a resource of the server under its document policy, `media.models.read`.
+
 ### Prompts
 
-`media-model-select`, `media-image-edit` and `media-video-generate` draft a run from a
-goal, and `media-task-review` reviews a finished run's outputs and cost.
+Each prompt states its task and names the skill that says how: `media-model-select`,
+`media-image-edit` and `media-video-generate` draft a run from a goal without starting it
+(`generate-media`), and `media-task-review` reviews a finished run (`review-a-run`).
 
 ## Runs
 
@@ -175,7 +190,7 @@ one to the other:
 
 | Configuration | Completion |
 |---|---|
-| `VEOVEO_PUBLIC_ORIGIN` set | Events. The installation's public origin holds every server under its own path, and the submission names `{origin}/media/operations/{operation_id}/{token}` as the webhook, such as `https://veoveo.example.com/media/operations/…`. The callback route checks the signature and the signing time, the runtime matches the token's digest and stores each event once, and the first final event wins. |
+| `VEOVEO_PUBLIC_ORIGIN` set | Events. The installation's public origin holds every server under its own path, and the submission names `{origin}/media/operations/{operation_id}/{token}` as the webhook, such as `https://veoveo.example.com/media/operations/…`. The routes declare the callback prefix, `/media/operations/`, as the SDK's operation callbacks, a public route with the SDK's event body limit and request rate, so the registration and Discover name it and the Hub routes it. The callback route checks the signature and the signing time, the runtime matches the token's digest and stores each event once, and the first final event wins. |
 | `VEOVEO_PUBLIC_ORIGIN` unset | Checks. The submission names no webhook. Media checks the prediction's status endpoint, the provider's `urls.get`, first after 3 seconds, then every 3 seconds growing by a quarter each time, at most 40 times before the deadline. A status endpoint off the provider's origin is never called. |
 
 A prediction names its completion, `events` or `checks`, once the run reached the

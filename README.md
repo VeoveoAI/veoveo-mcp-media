@@ -98,7 +98,7 @@ checks alone do not qualify them. Follow the installation-owned setup and polici
 [veoveo-template-installation](https://github.com/VeoveoAI/veoveo-template-installation/blob/main/openshell/MEDIA.md)
 and the [Media execution record](https://github.com/VeoveoAI/veoveo-docs/blob/main/records/OPENSHELL_HARDCUT_PLAN.md#media-native-integration-plan).
 Endpoint, provider and placement configuration belongs to that trusted
-installation, retaining the caller's existing Work Context.
+installation; each output belongs to the caller whose run made it.
 
 The service is private `vv-services/media`, listening on port 8802 and
 registering the logical endpoint `http://media.internal:8802/media/mcp` with Hub.
@@ -164,8 +164,7 @@ reference variables:
   --skip a_running_generation_recovers_after_media_and_hub_restart
 ```
 
-`VEOVEO_ACCEPTANCE_WORK_CONTEXT` defaults to `local` and
-`VEOVEO_ACCEPTANCE_LABELS` to the JSON array `[]`. Provenance is checked against
+`VEOVEO_ACCEPTANCE_LABELS` defaults to the JSON array `[]`. Provenance is checked against
 these explicit expected inputs and the billed principal, rather than guessed from
 an opaque token. Signed download JSON TextContent must equal `structuredContent`;
 the test parses that text, then sends the exact GET URL and every signed header and

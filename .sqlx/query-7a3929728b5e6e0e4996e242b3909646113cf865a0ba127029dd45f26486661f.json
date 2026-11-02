@@ -1,0 +1,186 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- One artifact and the caller's level on it, locked until the change commits.\n-- Parameters $1 to $7 are the caller's facts for artifact.effective_level: tenant,\n-- principal, principal key, groups, their roles, labels and time.\nSELECT\n    a.artifact_id AS \"artifact_id: ArtifactId\",\n    a.owner_key,\n    a.name,\n    a.media_type,\n    a.size_bytes,\n    a.labels,\n    a.release_state AS \"release_state: ReleaseState\",\n    a.state AS \"state: ArtifactState\",\n    a.provenance AS \"provenance: Json<ArtifactProvenance>\",\n    a.metadata AS \"metadata: Json<ArtifactMetadataMap>\",\n    a.created_at,\n    a.available_at,\n    a.retain_until,\n    artifact.effective_level(a, $1, $2, $3, $4, $5, $6, $7) AS \"level!: i16\"\nFROM artifact.artifact AS a\nWHERE a.tenant = $1 AND a.artifact_id = $8\nFOR UPDATE OF a\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "owner_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "owner_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "labels",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "labels"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "release_state: ReleaseState",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "release_state"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "state: ArtifactState",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "provenance: Json<ArtifactProvenance>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "provenance"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "metadata: Json<ArtifactMetadataMap>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "metadata"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "available_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "available_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "retain_until",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "retain_until"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "level!: i16",
+        "type_info": "Int2",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "7a3929728b5e6e0e4996e242b3909646113cf865a0ba127029dd45f26486661f"
+}

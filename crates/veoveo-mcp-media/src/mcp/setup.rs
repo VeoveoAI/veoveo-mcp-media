@@ -1,11 +1,12 @@
-//! Media's checked contract: slug, scheme, scope, documents, the fixed resources it lists
-//! and the templates it declares.
+//! Media's checked contract: slug, scheme, scope, documents, skills, the fixed resources
+//! it lists and the templates it declares.
 use std::sync::LazyLock;
 
 use rmcp::model::{ServerCapabilities, ServerConfig};
 use veoveo_hub_sdk::{
     docs::ServerDocs,
     server_contract::{McpServerContract, McpServerSetup},
+    skills::ServerSkills,
 };
 use veoveo_types::ResourceScheme;
 
@@ -15,6 +16,10 @@ use crate::contract::{MediaProvider, MediaScope};
 /// `media://docs/{doc_id}`, `media://contract` and the admin document routes.
 pub(crate) static SERVER_DOCS: LazyLock<ServerDocs> =
     LazyLock::new(|| veoveo_hub_sdk::server_docs!("media"));
+
+/// The skills under `skills/`, embedded at build time and served at `skill://media/…`.
+pub(crate) static SERVER_SKILLS: LazyLock<ServerSkills> =
+    LazyLock::new(|| veoveo_hub_sdk::server_skills!("media"));
 
 pub struct MediaContract;
 
@@ -34,6 +39,9 @@ impl McpServerContract for MediaContract {
     }
     fn documents() -> &'static ServerDocs {
         &SERVER_DOCS
+    }
+    fn skills() -> &'static ServerSkills {
+        &SERVER_SKILLS
     }
     fn server_config() -> ServerConfig {
         server_config()
@@ -63,19 +71,26 @@ fn server_config() -> ServerConfig {
     let mut info = ServerConfig::default();
     info.capabilities = capabilities;
     info.server_info = rmcp::model::Implementation::new("media", env!("CARGO_PKG_VERSION"));
-    info.instructions = Some(
-        "Generate images, video and audio with provider models. Browse `media://models` or \
-         call `models`, read a model's input schema at `media://model/{+model_id}` or with \
-         `model_schema`, then call `run` as a Task with the model and an input that satisfies \
-         the schema. A finished run returns the Artifact addresses of its outputs; read them \
-         through Artifact. Each run's cost appears on its Task."
-            .to_owned(),
-    );
+    info.instructions = Some(INSTRUCTIONS.to_owned());
     info
 }
 
+/// What the server is and which skills say how to use it.
+const INSTRUCTIONS: &str = "Media generates images, video, audio and 3D with provider \
+     models, for a cost, and stores each output as an Artifact of the person. Its skills \
+     say how: skill://media/generate-media/SKILL.md and skill://media/review-a-run/SKILL.md.";
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_instructions_name_every_skill_the_server_serves() {
+        let skills = &*super::SERVER_SKILLS;
+        assert_eq!(skills.skills().len(), 2);
+        for skill in skills.skills() {
+            assert!(super::INSTRUCTIONS.contains(&skill.uri), "{}", skill.uri);
+        }
+    }
+
     #[test]
     fn the_setup_round_trips_every_resource_and_template() {
         let setup = &*super::SERVER_SETUP;

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a server queues its Tasks of every tenant once the operations they are parked on stopped pending)\n-- Queue server $1's Tasks parked on the listed operations, which the transaction just\n-- settled or marked unresolved under their row locks. It runs as its own statement after\n-- the one that changed them: that statement read the Tasks as they were when it began, so\n-- it misses a park that held an operation's lock then and committed while it waited for\n-- that lock. This statement begins after the lock was granted and sees that park.\nUPDATE tasks.task AS task\nSET status = 'queued', status_message = 'Queued', parked_on = NULL\nFROM unnest($2::uuid[], $3::text[]) AS stopped (task_id, operation_key)\nWHERE task.server = $1 AND task.id = stopped.task_id\n    AND task.parked_on = stopped.operation_key AND task.status = 'waiting'\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "UuidArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9bcef08bf1215c0801799828a78454e7871bba54341a581e91a1a15dd5600d9d"
+}

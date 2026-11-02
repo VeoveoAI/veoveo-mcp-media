@@ -108,6 +108,9 @@ static ROUTES: LazyLock<Routes<MediaMcp>> = LazyLock::new(|| {
     let routes = Routes::<MediaMcp>::builder(policy(ModelsRead))
         .uses(ArtifactPermission::ArtifactsRead.name())
         .uses(ArtifactPermission::ArtifactsWrite.name())
+        // The provider's webhook, which the hosted server serves as the SDK's operation
+        // callbacks.
+        .operation_callbacks()
         .collection::<ModelsTool, _, _>(
             "A page of models in identity order. Select `filters.query` or `filters.type`; continue with the same filters and limit using `nextCursor` as `cursor`.",
             policy(ModelsRead),

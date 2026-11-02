@@ -362,7 +362,6 @@ fn forwarded_user() -> veoveo_hub_sdk::HubInternalIdentity {
             oauth_client_id: OAuthClientId::parse(testing::TEST_CLIENT).unwrap(),
             session_family: None,
             audience: ProtectedResourceId::parse(testing::TEST_RESOURCE).unwrap(),
-            work_context: authority.work_context.clone(),
             invocation_mode: InvocationMode::Direct,
             initiator: Some(principal.id.clone()),
             delegation_id: None,
