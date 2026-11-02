@@ -617,11 +617,8 @@ async fn a_caller_without_the_run_permission_starts_nothing() {
             .await;
         assert!(answer["error"].is_object(), "{answer}");
         assert_eq!(harness.fake().submissions(), 0);
-        // The catalog stays readable.
-        let models = harness
-            .mesh
-            .call("media", "models", json!({"filters":{}}))
-            .await;
+        // The catalog stays readable, and `{}` is its first page.
+        let models = harness.mesh.call("media", "models", json!({})).await;
         assert_eq!(
             models["result"]["structuredContent"]["items"]
                 .as_array()
