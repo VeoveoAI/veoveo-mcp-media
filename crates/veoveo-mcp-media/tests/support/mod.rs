@@ -15,7 +15,7 @@ use veoveo_fixtures::store::TestDb;
 use veoveo_hub_sdk::{
     durable_tasks::{CallbackUrls, DurableTasks, TaskWorker},
     hosting::{
-        Hosted, ListenOnly, ServerCalls,
+        Hosted, ServerCalls,
         operations::operation_callbacks,
         testing::{self, RunningMesh, TestMesh},
     },
@@ -25,8 +25,8 @@ use veoveo_hub_sdk::{
 use veoveo_mcp_artifact::{
     contract::ArtifactPermission,
     mcp::{
-        AUTHORIZATION as ARTIFACT_AUTHORIZATION, ArtifactApp, ArtifactMcp, ArtifactSubscriptions,
-        TenantHubs, watch_changes as watch_artifact,
+        AUTHORIZATION as ARTIFACT_AUTHORIZATION, ArtifactApp, ArtifactMcp, TenantHubs,
+        watch_changes as watch_artifact,
     },
     service::ArtifactService,
     share::ShareBase,
@@ -219,6 +219,9 @@ pub async fn harness_for(
 ) -> Harness {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let db = TestDb::new().await;
+    // pgvector in `_extensions`, as the installation's bootstrap creates it, for
+    // Artifact's knowledge columns.
+    db.create_extensions(&["vector"]).await;
     db.migrate_server(&artifact(), veoveo_mcp_artifact::migrator())
         .await;
     db.migrate_server(&media(), veoveo_mcp_media::migrator())
@@ -245,9 +248,22 @@ pub async fn harness_for(
         artifact_platform.clone(),
         hubs.clone(),
     )));
+    // Artifact's Task runtime, which holds the index Tasks of a person's own uploads; Media's
+    // uploads are another server's calls, which Artifact indexes before it returns.
+    let artifact_tasks = TaskRuntime::new(
+        artifact_platform.clone(),
+        artifact(),
+        testing::deployment_id(),
+        Arc::new(
+            Instance::start(&artifact_platform, &artifact())
+                .await
+                .unwrap(),
+        ),
+    );
     let artifact_app = Arc::new(ArtifactApp {
         service: (*service).clone(),
         hubs,
+        tasks: artifact_tasks,
     });
 
     // Media's catalog of the provider's registry.
@@ -286,11 +302,7 @@ pub async fn harness_for(
     mesh.register((*ARTIFACT_AUTHORIZATION).clone());
     mesh.serve(
         testing::for_domain::<ArtifactMcp>()
-            .handler(move || {
-                Hosted::new(ArtifactMcp::new(artifact_app.clone())).with_tasks(ListenOnly::new(
-                    ArtifactSubscriptions::new(artifact_app.clone()),
-                ))
-            })
+            .handler(move || veoveo_mcp_artifact::mcp::hosted(artifact_app.clone()))
             .build(),
     );
     let media_calls = mesh.register((*AUTHORIZATION).clone());

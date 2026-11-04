@@ -6,7 +6,8 @@ ARG COMPONENT=veoveo-mcp-media
 
 FROM rust:1.99.0-trixie@sha256:6ff07edce8775d0f64be7aba9197229407301bddf2054d62c27b541a6238a181 AS dev
 # PostgreSQL 18.6 from the PGDG repository, whose signing key Debian's postgresql-common
-# ships. Tests start their own clusters, so the packages create none.
+# ships, with pgvector 0.8.7, which the in-process Artifact's knowledge columns use.
+# Tests start their own clusters, so the packages create none.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates clang cmake git pkg-config procps postgresql-common \
     && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
@@ -14,6 +15,7 @@ RUN apt-get update \
     && printf 'create_main_cluster = false\n' > /etc/postgresql-common/createcluster.d/veoveo.conf \
     && apt-get install -y --no-install-recommends \
         postgresql-18=18.6-1.pgdg13+2 postgresql-client-18=18.6-1.pgdg13+2 libpq5=18.6-1.pgdg13+2 \
+        postgresql-18-pgvector=0.8.7-1.pgdg13+1 \
     && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log \
     && rustup component add clippy rustfmt
 ENV PATH=/usr/lib/postgresql/18/bin:${PATH}
@@ -71,6 +73,8 @@ RUN --mount=type=cache,id=veoveo-mcp-media-cargo-registry,target=/usr/local/carg
     && psql --host 127.0.0.1 --username postgres --dbname veoveo --quiet \
         --command "SELECT kernel.ensure_server('artifact')" \
         --command "SELECT kernel.ensure_server('media')" \
+    && psql --host 127.0.0.1 --username postgres --dbname veoveo --quiet \
+        --command "CREATE SCHEMA _extensions AUTHORIZATION postgres; REVOKE ALL ON SCHEMA _extensions FROM PUBLIC; GRANT USAGE ON SCHEMA _extensions TO PUBLIC; CREATE EXTENSION vector WITH SCHEMA _extensions" \
     && DATABASE_URL=postgres://postgres@127.0.0.1/veoveo cargo sqlx migrate run \
         --source "${artifact}/migrations" --config "${artifact}/sqlx.toml" \
     && DATABASE_URL=postgres://postgres@127.0.0.1/veoveo cargo sqlx migrate run \
