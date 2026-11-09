@@ -264,6 +264,8 @@ pub async fn harness_for(
         service: (*service).clone(),
         hubs,
         tasks: artifact_tasks,
+        library: veoveo_mcp_artifact::mcp::app::document().expect("Artifact's App document"),
+        pictures: None,
     });
 
     // Media's catalog of the provider's registry.

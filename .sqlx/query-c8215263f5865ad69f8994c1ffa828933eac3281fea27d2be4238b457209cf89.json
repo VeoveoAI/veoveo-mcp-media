@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- veoveo: all tenants (a preview names its link by a token alone, whose digest is unique across tenants)\n-- What the preview's token names, while its link is live: not revoked or expired, to a released,\n-- available artifact without labels. A link's redemption limit counts visits, so it does not end\n-- a preview already opened.\nSELECT\n    s.tenant AS \"tenant: StoredTenant\",\n    s.artifact_id AS \"artifact_id: ArtifactId\",\n    a.name,\n    a.media_type,\n    a.size_bytes AS \"size_bytes!\"\nFROM artifact.share_link AS s\nJOIN artifact.artifact AS a ON a.tenant = s.tenant AND a.artifact_id = s.artifact_id\nWHERE s.preview_digest = $1\n    AND s.revoked_at IS NULL\n    AND s.expires_at > $2\n    AND a.release_state = 'released'\n    AND a.state = 'available'\n    AND cardinality(a.labels) = 0\n    AND a.size_bytes IS NOT NULL\n    AND (a.retain_until IS NULL OR a.retain_until > $2)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant: StoredTenant",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "tenant"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "artifact_id: ArtifactId",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "artifact_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "media_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "size_bytes!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "artifact.artifact",
+            "name": "size_bytes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c8215263f5865ad69f8994c1ffa828933eac3281fea27d2be4238b457209cf89"
+}

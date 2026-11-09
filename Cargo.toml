@@ -24,11 +24,11 @@ veoveo-usage = { git = "https://github.com/VeoveoAI/veoveo-core", rev = "a8dafe9
 # The Rust SDK for Veoveo MCP servers: the contract feature for declarations and typed
 # calls, the server feature for hosting, registration, Task work, operations, usage and
 # calls to other servers.
-veoveo-hub-sdk = { git = "https://github.com/VeoveoAI/veoveo-hub-sdk", rev = "b820f05258bd6d12dc7c02f9fb0955f7ccb0b17a", default-features = false }
+veoveo-hub-sdk = { git = "https://github.com/VeoveoAI/veoveo-hub-sdk", rev = "5ff33f1f669385099fdd405f6e6bbd6ee190a45c", default-features = false }
 # Artifact, where Media stores what a provider generates: its `client` feature in the
 # server, its hosted server in the tests that run Artifact in process. Artifact pins the
 # same SDK revision, so one SDK serves both.
-veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "d570e066e1121647ce4800182683de201c06e9ac", default-features = false }
+veoveo-mcp-artifact = { git = "https://github.com/VeoveoAI/veoveo-mcp-artifact", rev = "548dac1fcd4e23e87f8c6c4a9e43e011d5d6b637", default-features = false }
 
 anyhow = "=1.0.104"
 # The fake provider's HTTP server and the server's public callback route.
@@ -45,7 +45,7 @@ jsonschema = { version = "=0.58.6", default-features = false }
 # The SDK's HTTP client release; the provider client and the tests share it.
 reqwest = { version = "=0.13.5", default-features = false }
 # The rmcp fork the SDK pins; Media's tool router uses its macros.
-rmcp = { version = "=3.8.0", git = "https://github.com/VeoveoAI/rust-sdk", rev = "d45f7f5e43e910f818400ca702cc904c5682c213" }
+rmcp = { version = "=3.9.0", git = "https://github.com/VeoveoAI/rust-sdk", rev = "e8c8868f252b22835b960942d38a4b51182e0270" }
 rustls = { version = "0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
 secrecy = "0.10.3"
 # The release the SDK pins exactly.

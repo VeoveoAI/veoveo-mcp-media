@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "-- veoveo: all tenants (a share link names its artifact by its secret alone, and the secret's digest is unique across tenants)\n-- Count one redemption of a live link to a released, available artifact without labels,\n-- and return what the download URL names. The row lock and the limit in the WHERE clause\n-- let at most the link's limit of concurrent redemptions through.\nUPDATE artifact.share_link AS s\nSET redemptions = s.redemptions + 1\nFROM artifact.artifact AS a\nWHERE s.secret_digest = $1\n    AND s.revoked_at IS NULL\n    AND s.expires_at > $2\n    AND (s.redemption_limit IS NULL OR s.redemptions < s.redemption_limit)\n    AND a.tenant = s.tenant\n    AND a.artifact_id = s.artifact_id\n    AND a.release_state = 'released'\n    AND a.state = 'available'\n    AND cardinality(a.labels) = 0\n    AND (a.retain_until IS NULL OR a.retain_until > $2)\nRETURNING\n    s.tenant AS \"tenant: StoredTenant\",\n    s.share_link_id AS \"share_link_id: ShareLinkId\",\n    s.artifact_id AS \"artifact_id: ArtifactId\",\n    s.redemptions,\n    a.name,\n    a.media_type\n",
+  "query": "-- veoveo: all tenants (a share link names its artifact by its secret alone, and the secret's digest is unique across tenants)\n-- Count one redemption of a live link to a released, available artifact without labels,\n-- and return what the download URL names. The row lock and the limit in the WHERE clause\n-- let at most the link's limit of concurrent redemptions through.\nUPDATE artifact.share_link AS s\nSET redemptions = s.redemptions + 1\nFROM artifact.artifact AS a\nWHERE s.secret_digest = $1\n    AND s.revoked_at IS NULL\n    AND s.expires_at > $2\n    AND (s.redemption_limit IS NULL OR s.redemptions < s.redemption_limit)\n    AND a.tenant = s.tenant\n    AND a.artifact_id = s.artifact_id\n    AND a.release_state = 'released'\n    AND a.state = 'available'\n    AND cardinality(a.labels) = 0\n    AND (a.retain_until IS NULL OR a.retain_until > $2)\nRETURNING\n    s.tenant AS \"tenant: StoredTenant\",\n    s.share_link_id AS \"share_link_id: ShareLinkId\",\n    s.artifact_id AS \"artifact_id: ArtifactId\",\n    s.redemptions,\n    s.expires_at,\n    a.name,\n    a.media_type\n",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "artifact.share_link",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "name",
         "type_info": "Text",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "media_type",
         "type_info": "Text",
         "origin": {
@@ -82,8 +93,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "b81ec933745c6eb7426b0500cfc3d7cdf5dd0f49c7c7b6792cbaac4a2c78f54a"
+  "hash": "19488295d95c45924bdd852db4ddfd0f348be6038540443f307ad6e10d6bfc0b"
 }
