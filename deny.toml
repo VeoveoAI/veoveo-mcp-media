@@ -9,6 +9,9 @@ ignore = [
     # aws-smithy-http reaches it, through Artifact's server that the tests run; this goes when
     # the SDK drops it, as in Artifact's policy.
     { id = "RUSTSEC-2026-0441", reason = "pin-utils is unmaintained; reached only through Artifact's aws-sdk-s3" },
+    # Unmaintained with no vulnerability and no patched release; these go when the graph drops them.
+    { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained, with no patched release; core and the SDK use it, and rmcp, schemars and sqlx depend on it" },
+    { id = "RUSTSEC-2026-0542", reason = "humantime is unmaintained, with no patched release; reached only through object_store in core's audit" },
 ]
 
 [licenses]
