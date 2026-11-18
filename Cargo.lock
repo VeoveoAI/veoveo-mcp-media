@@ -2869,8 +2869,8 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "3.9.0"
-source = "git+https://github.com/VeoveoAI/rust-sdk?rev=e8c8868f252b22835b960942d38a4b51182e0270#e8c8868f252b22835b960942d38a4b51182e0270"
+version = "3.11.0"
+source = "git+https://github.com/VeoveoAI/rust-sdk?rev=1e7caf018db7eb3bed2e81023e10fc0ce58af8a5#1e7caf018db7eb3bed2e81023e10fc0ce58af8a5"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2883,6 +2883,7 @@ dependencies = [
  "indexmap",
  "libc",
  "pastey",
+ "percent-encoding",
  "pin-project-lite",
  "rand 0.10.3",
  "reqwest",
@@ -2898,13 +2899,15 @@ dependencies = [
  "tokio-util",
  "tower-service",
  "tracing",
+ "unicode-general-category",
+ "unicode-normalization",
  "uuid",
 ]
 
 [[package]]
 name = "rmcp-macros"
-version = "3.9.0"
-source = "git+https://github.com/VeoveoAI/rust-sdk?rev=e8c8868f252b22835b960942d38a4b51182e0270#e8c8868f252b22835b960942d38a4b51182e0270"
+version = "3.11.0"
+source = "git+https://github.com/VeoveoAI/rust-sdk?rev=1e7caf018db7eb3bed2e81023e10fc0ce58af8a5#1e7caf018db7eb3bed2e81023e10fc0ce58af8a5"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -4247,7 +4250,7 @@ dependencies = [
 [[package]]
 name = "veoveo-hub-sdk"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=5ff33f1f669385099fdd405f6e6bbd6ee190a45c#5ff33f1f669385099fdd405f6e6bbd6ee190a45c"
+source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=fb79f3f24b289b0afc647d2a3da208f858d08f10#fb79f3f24b289b0afc647d2a3da208f858d08f10"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
@@ -4298,7 +4301,7 @@ dependencies = [
 [[package]]
 name = "veoveo-hub-sdk-macros"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=5ff33f1f669385099fdd405f6e6bbd6ee190a45c#5ff33f1f669385099fdd405f6e6bbd6ee190a45c"
+source = "git+https://github.com/VeoveoAI/veoveo-hub-sdk?rev=fb79f3f24b289b0afc647d2a3da208f858d08f10#fb79f3f24b289b0afc647d2a3da208f858d08f10"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4324,7 +4327,7 @@ dependencies = [
 [[package]]
 name = "veoveo-mcp-artifact"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=548dac1fcd4e23e87f8c6c4a9e43e011d5d6b637#548dac1fcd4e23e87f8c6c4a9e43e011d5d6b637"
+source = "git+https://github.com/VeoveoAI/veoveo-mcp-artifact?rev=fa97ecc275a10bf643e28970dfde830119f880ed#fa97ecc275a10bf643e28970dfde830119f880ed"
 dependencies = [
  "anyhow",
  "aws-sdk-s3",
@@ -4367,7 +4370,7 @@ dependencies = [
 [[package]]
 name = "veoveo-mcp-embedding"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-mcp-embedding?rev=a06ca5005d95563f5324bd73557c8cffa0e6351f#a06ca5005d95563f5324bd73557c8cffa0e6351f"
+source = "git+https://github.com/VeoveoAI/veoveo-mcp-embedding?rev=a30929b3df8a5ca3152baf9d02fdf7ed51a467af#a30929b3df8a5ca3152baf9d02fdf7ed51a467af"
 dependencies = [
  "schemars",
  "serde",
@@ -4423,7 +4426,7 @@ dependencies = [
 [[package]]
 name = "veoveo-mcp-thumb"
 version = "0.1.0"
-source = "git+https://github.com/VeoveoAI/veoveo-mcp-thumb?rev=f31766c0c6d2e29e74ffa649d29d758f03f11af9#f31766c0c6d2e29e74ffa649d29d758f03f11af9"
+source = "git+https://github.com/VeoveoAI/veoveo-mcp-thumb?rev=df1807fd71fa7f169705d509f7c40c2f96b18121#df1807fd71fa7f169705d509f7c40c2f96b18121"
 dependencies = [
  "schemars",
  "serde",
