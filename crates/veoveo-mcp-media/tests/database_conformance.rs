@@ -1,7 +1,7 @@
 //! The crate's queries and its schema against the server schema rules of veoveo-core's
 //! `docs/DATABASE.md`: tenant predicates, row bounds, index use under generic plans, and
 //! primary keys, foreign-key indexes and retention comments. The check reads the
-//! queries from the workspace's `.sqlx` metadata and needs the PostgreSQL 18 server
+//! queries from the workspace's `.sqlx` metadata and needs the PostgreSQL 19 server
 //! programs on `PATH`.
 use veoveo_fixtures::database::Conformance;
 

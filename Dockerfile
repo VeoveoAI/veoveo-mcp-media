@@ -5,7 +5,7 @@
 ARG COMPONENT=veoveo-mcp-media
 
 FROM rust:1.100.0-trixie@sha256:223cc32ddca8f3ee90c436dbc94b6b5f052ea7f9653c5201e9612f08ad7d21b8 AS dev
-# PostgreSQL 18.7 from the PGDG repository, whose signing key Debian's postgresql-common
+# PostgreSQL 19.0 from the PGDG repository, whose signing key Debian's postgresql-common
 # ships, with pgvector 0.8.7, which the in-process Artifact's knowledge columns use.
 # Tests start their own clusters, so the packages create none.
 RUN apt-get update \
@@ -14,11 +14,11 @@ RUN apt-get update \
     && mkdir -p /etc/postgresql-common/createcluster.d \
     && printf 'create_main_cluster = false\n' > /etc/postgresql-common/createcluster.d/veoveo.conf \
     && apt-get install -y --no-install-recommends \
-        postgresql-18=18.7-1.pgdg13+5 postgresql-client-18=18.7-1.pgdg13+5 libpq5=19.0-2.pgdg13+1 \
-        postgresql-18-pgvector=0.8.7-1.pgdg13+2 \
+        postgresql-19=19.0-2.pgdg13+1 postgresql-client-19=19.0-2.pgdg13+1 libpq5=19.0-2.pgdg13+1 \
+        postgresql-19-pgvector=0.8.7-1.pgdg13+2 \
     && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log \
     && rustup component add clippy rustfmt
-ENV PATH=/usr/lib/postgresql/18/bin:${PATH}
+ENV PATH=/usr/lib/postgresql/19/bin:${PATH}
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo install --locked \
         cargo-nextest@0.9.148 \

@@ -67,7 +67,7 @@ provider's callbacks at `{public_origin}/media/operations/{operation_id}/{token}
 docker build --target check .
 ```
 
-The `check` stage checks the `.sqlx` metadata against a migrated PostgreSQL 18.7
+The `check` stage checks the `.sqlx` metadata against a migrated PostgreSQL 19.0
 database, then runs rustfmt, clippy with warnings denied, cargo-deny, cargo-hack on each
 feature and the nextest `ci` profile with every feature on. The run tests start a
 private PostgreSQL, a private SeaweedFS and the fake provider per test. The gate never

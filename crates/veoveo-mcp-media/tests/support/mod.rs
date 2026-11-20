@@ -1,7 +1,7 @@
 //! Shared fixtures: a fresh database migrated for Artifact and Media under their own
 //! logins, a private SeaweedFS, Artifact in process, the fake provider, and both servers on
 //! the SDK's in-process mesh with Media's run worker on its own process instance.
-//! Requires the PostgreSQL 18 server programs and `weed` (SeaweedFS) on `PATH`.
+//! Requires the PostgreSQL 19 server programs and `weed` (SeaweedFS) on `PATH`.
 #![allow(dead_code)]
 
 pub mod seaweedfs;
