@@ -4,7 +4,7 @@
 
 ARG COMPONENT=veoveo-mcp-media
 
-FROM rust:1.99.0-trixie@sha256:6ff07edce8775d0f64be7aba9197229407301bddf2054d62c27b541a6238a181 AS dev
+FROM rust:1.100.0-trixie@sha256:223cc32ddca8f3ee90c436dbc94b6b5f052ea7f9653c5201e9612f08ad7d21b8 AS dev
 # PostgreSQL 18.6 from the PGDG repository, whose signing key Debian's postgresql-common
 # ships, with pgvector 0.8.7, which the in-process Artifact's knowledge columns use.
 # Tests start their own clusters, so the packages create none.
